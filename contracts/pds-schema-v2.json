@@ -1,0 +1,215 @@
+{
+  "version": "2.0",
+  "timezone": "Asia/Seoul",
+  "duration_unit": "minutes",
+  "storage": {
+    "backend": "Supabase PostgreSQL",
+    "public_no_login": true
+  },
+  "tables": {
+    "plans": {
+      "primary_key": "id",
+      "fields": {
+        "id": "uuid",
+        "title": "text",
+        "start_date": "date",
+        "end_date": "date",
+        "priority": "text(low|medium|high)",
+        "success_criteria": "text",
+        "estimated_minutes": "integer",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz",
+        "status": "text(active|completed)",
+        "completed_at": "timestamptz|null",
+        "progress_mode": "text(time|custom)",
+        "daily_target_minutes": "integer|null",
+        "primary_progress_item_id": "uuid|null"
+      },
+      "constraints": [
+        "end_date >= start_date",
+        "estimated_minutes >= 0",
+        "daily_target_minutes IS NULL OR daily_target_minutes >= 0"
+      ]
+    },
+    "plan_history": {
+      "primary_key": "id",
+      "fields": {
+        "id": "uuid",
+        "plan_id": "uuid",
+        "title": "text",
+        "start_date": "date",
+        "end_date": "date",
+        "priority": "text(low|medium|high)",
+        "success_criteria": "text",
+        "estimated_minutes": "integer",
+        "changed_at": "timestamptz"
+      },
+      "constraints": [
+        "end_date >= start_date",
+        "estimated_minutes >= 0"
+      ]
+    },
+    "plan_progress_items": {
+      "primary_key": "id",
+      "fields": {
+        "id": "uuid",
+        "plan_id": "uuid",
+        "name": "text",
+        "target_value": "numeric",
+        "unit": "text",
+        "created_at": "timestamptz",
+        "daily_target_value": "numeric"
+      },
+      "constraints": [
+        "target_value > 0",
+        "daily_target_value > 0"
+      ]
+    },
+    "tasks": {
+      "primary_key": "id",
+      "fields": {
+        "id": "uuid",
+        "plan_id": "uuid",
+        "title": "text",
+        "description": "text|null",
+        "due_date": "date|null",
+        "priority": "text(low|medium|high)",
+        "tag": "text|null",
+        "estimated_minutes": "integer",
+        "status": "text(todo|completed)",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz",
+        "deleted_at": "timestamptz|null",
+        "completion_version": "integer",
+        "progress_item_id": "uuid|null",
+        "progress_amount": "numeric"
+      },
+      "constraints": [
+        "estimated_minutes >= 0",
+        "completion_version >= 0",
+        "progress_amount >= 0"
+      ]
+    },
+    "execution_records": {
+      "primary_key": "id",
+      "fields": {
+        "id": "uuid",
+        "task_id": "uuid",
+        "started_at": "timestamptz",
+        "ended_at": "timestamptz",
+        "actual_minutes": "integer",
+        "blocked_reason": "text|null",
+        "created_at": "timestamptz"
+      },
+      "constraints": [
+        "ended_at >= started_at",
+        "actual_minutes >= 0"
+      ]
+    },
+    "completion_events": {
+      "primary_key": "id",
+      "fields": {
+        "id": "uuid",
+        "task_id": "uuid",
+        "completion_version": "integer",
+        "completed_at": "timestamptz"
+      },
+      "constraints": [
+        "completion_version > 0",
+        "unique(task_id, completion_version)"
+      ]
+    },
+    "reflections": {
+      "primary_key": "id",
+      "fields": {
+        "id": "uuid",
+        "plan_id": "uuid",
+        "improvement": "text",
+        "created_at": "timestamptz",
+        "next_plan_id": "uuid|null"
+      }
+    },
+    "task_reflections": {
+      "primary_key": "id",
+      "fields": {
+        "id": "uuid",
+        "task_id": "uuid",
+        "improvement": "text",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "constraints": [
+        "unique(task_id)"
+      ]
+    },
+    "important_dates": {
+      "primary_key": "id",
+      "fields": {
+        "id": "uuid",
+        "date": "date",
+        "title": "text",
+        "note": "text|null",
+        "importance": "text(normal|important)",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "constraints": [
+        "trimmed title must not be empty"
+      ]
+    }
+  },
+  "relationships": [
+    "plans 1:N plan_history (ON DELETE CASCADE)",
+    "plans 1:N plan_progress_items (ON DELETE CASCADE)",
+    "plans 1:N tasks (ON DELETE CASCADE)",
+    "plan_progress_items 1:N tasks via progress_item_id (ON DELETE SET NULL)",
+    "tasks 1:N execution_records (ON DELETE CASCADE)",
+    "tasks 1:N completion_events (ON DELETE CASCADE)",
+    "plans 1:N reflections (ON DELETE CASCADE)",
+    "reflections N:1 plans via next_plan_id (ON DELETE SET NULL)",
+    "tasks 1:0..1 task_reflections (ON DELETE CASCADE)",
+    "plans.primary_progress_item_id -> plan_progress_items.id (ON DELETE SET NULL)"
+  ],
+  "triggers": {
+    "plans_snapshot_before_update": "Before relevant plan fields change, save OLD values to plan_history.",
+    "plans_set_updated_at": "Refresh plans.updated_at before update.",
+    "trg_sync_plan_progress_targets": "When plan dates change, recalculate progress-item total targets."
+  },
+  "functions": {
+    "complete_task": {
+      "args": [
+        "p_task_id uuid"
+      ],
+      "returns": "tasks",
+      "notes": "Changes todo to completed, increments completion_version, and creates exactly one completion_event. Repeated completion on an already-completed task does not create another event."
+    },
+    "cancel_task_completion": {
+      "args": [
+        "p_task_id uuid"
+      ],
+      "returns": "tasks",
+      "notes": "Returns the task to todo and removes only the completion_event for the current completion_version. execution_records and task_reflections are preserved."
+    }
+  },
+  "rules": [
+    "All duration values are stored in minutes.",
+    "Date and overdue comparisons use Asia/Seoul.",
+    "deleted tasks use deleted_at and are excluded from normal task lists and review aggregation.",
+    "Plan edits snapshot previous values into plan_history.",
+    "Task completion uses complete_task(uuid) and completion_events unique(task_id, completion_version) prevents duplicate completion evidence.",
+    "Completion cancellation preserves execution_records and task_reflections.",
+    "A task execution record never overwrites the task's planned estimated_minutes.",
+    "progress_item_id is optional for backward compatibility.",
+    "progress_amount contributes to custom-unit activity progress only when the task is completed.",
+    "plan_progress_items.target_value equals daily_target_value multiplied by inclusive plan days.",
+    "Goal creation chooses one primary progress basis: time or a user-defined unit.",
+    "Time-mode activity progress uses execution_records.actual_minutes for completed tasks.",
+    "Custom-mode activity progress uses completed task progress_amount for the primary progress item.",
+    "Overall goal progress is derived from period progress and activity progress.",
+    "A plan can be completed manually, or the app can auto-complete it when overall progress reaches 100% and there is no incomplete task for that plan due today. Future tasks do not block this auto-completion.",
+    "important_dates stores user-defined calendar dates independently from plans and tasks.",
+    "The monthly calendar and weekly date strip share the same selected date.",
+    "Full JSON export includes plans, plan_history, plan_progress_items, tasks, execution_records, completion_events, task_reflections, reflections, and important_dates.",
+    "The browser uses only a publishable Supabase key; service_role and secret keys must not be included in client code."
+  ]
+}
