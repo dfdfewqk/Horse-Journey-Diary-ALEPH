@@ -3085,7 +3085,7 @@ async function cancelTaskCompletion(t){
   }catch(e){toast(e.message);return false}
 }
 async function toggleTask(t){if(t.status==="completed")return cancelTaskCompletion(t);return requestComplete(t)}
-async function deleteTask(id){try{localStorage.removeItem(timerKey(id));await api("tasks?id=eq."+id,{method:"PATCH",body:JSON.stringify({deleted_at:new Date().toISOString()})});await load();closeModal("taskDetailModal");drawRunningTimerBanner();refreshOpenViews();toast("할 일을 삭제했습니다.")}catch(e){toast(e.message)}}
+async function deleteTask(id){try{await api("tasks?id=eq."+id,{method:"PATCH",body:JSON.stringify({deleted_at:new Date().toISOString()})});localStorage.removeItem(timerKey(id));await load();closeModal("taskDetailModal");drawRunningTimerBanner();refreshOpenViews();toast("할 일을 삭제했습니다.")}catch(e){toast(e.message)}}
 
 /* TASK DETAIL / EXECUTION */
 function openTaskDetail(id,focusReflection=false){
@@ -3329,6 +3329,8 @@ function refreshOpenViews(){
   if($("calendarModal").classList.contains("open"))drawCalendar()
 }
 function drawAll(){$("todayLabel").textContent=new Date().toLocaleDateString("ko-KR",{year:"numeric",month:"long",day:"numeric",weekday:"long"});drawMainJournal()}
+window.addEventListener("storage",e=>{if(e.key&&e.key.startsWith(TIMER_PREFIX)){drawRunningTimerBanner();refreshOpenViews()}});
+setInterval(()=>{if(runningTimer())drawRunningTimerBanner()},30000);
 
 /* LOAD */
 
