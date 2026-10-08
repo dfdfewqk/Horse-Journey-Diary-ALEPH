@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="pds-build" content="2026-10-08-next-progress-editable-v2">
+<meta name="pds-build" content="2026-10-08-daily-goal-records-v1">
 <title>말과 함께 성장하는 다이어리</title>
 <style>
 :root{
@@ -114,6 +114,15 @@ h3{font-size:15px;margin:0}
 .formGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.field{display:flex;flex-direction:column;gap:5px}.field.full{grid-column:1/-1}.field label{font-size:11px;font-weight:800;color:#667064}
 input,select,textarea{border:1px solid var(--line);border-radius:10px;padding:10px;background:#fff;color:#1f2937}textarea{min-height:85px;resize:vertical}
 .progressManager{display:grid;gap:8px}.progressManageRow{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:10px}
+
+.dailyRecordList{display:grid;gap:8px}
+.dailyRecordItem{display:grid;grid-template-columns:110px minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:13px;background:#fcfdfb;cursor:pointer}
+.dailyRecordDate{font-size:11px;font-weight:900;color:#52604f}
+.dailyRecordMain{min-width:0}
+.dailyRecordTitle{font-size:12px;font-weight:900}
+.dailyRecordMeta{font-size:10px;color:var(--muted);margin-top:3px}
+.dailyRecordValue{font-size:12px;font-weight:900;text-align:right}
+@media(max-width:620px){.dailyRecordItem{grid-template-columns:1fr auto}.dailyRecordDate{grid-column:1/-1}}
 .addProgressGrid{display:grid;grid-template-columns:1.5fr .65fr .7fr auto;gap:7px;margin-top:8px}
 .progressDraftRow{display:grid;grid-template-columns:1.5fr .65fr .7fr auto;gap:7px;margin-top:7px}
 .tools{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:9px}.tools input{flex:1;min-width:180px}.tools>*{padding:9px 10px}
@@ -1973,6 +1982,11 @@ input:focus,select:focus,textarea:focus{
         <div id="progressEvidence" class="evidence hide"></div>
       </div>
 
+      <div class="detailSection">
+        <div class="head"><h3>하루 목표 기록</h3><span class="muted">DB 저장 기록</span></div>
+        <div id="planDailyRecords" class="dailyRecordList"></div>
+      </div>
+
       <div class="detailSection planAdvanced" id="planSettingsGoals">
         <div class="head"><h3>진행 기준</h3></div>
         <div id="progressManager" class="progressManager"></div>
@@ -2156,7 +2170,7 @@ const U="https://bcwzllejypavwgsfqfbm.supabase.co";
 const K="sb_publishable_rQOSzVLPSmRGAAGfnV5CVw_ZsyWj-4Z";
 const H={apikey:K,Authorization:"Bearer "+K,"Content-Type":"application/json",Prefer:"return=representation"};
 const S={
-  plans:[],history:[],tasks:[],execs:[],refs:[],taskRefs:[],events:[],progress:[],importantDates:[],
+  plans:[],history:[],tasks:[],execs:[],refs:[],taskRefs:[],events:[],progress:[],importantDates:[],dailyRecords:[],
   plan:null,mainDate:null,planDate:null,calendarMonth:null,
   editingPlan:null,editingTask:null,finishingTask:null,editingImportantDate:null
 };
@@ -2582,19 +2596,28 @@ function drawMainDateStrip(){
 
 
 function selectedDayPlanProgress(d,p){
+  const saved=S.dailyRecords.find(r=>r.plan_id===p.id&&r.record_date===d);
+  if(saved){
+    const mode=saved.progress_mode||p.progress_mode||"custom";
+    const value=Number(saved.actual_value||0),target=Number(saved.target_value||0),unit=saved.unit||"";
+    return{
+      mode,label:p.title,value,target,unit,record:saved,
+      text:mode==="time"?(mins(value)+" / "+mins(target)):(num(value)+" / "+num(target)+unit)
+    }
+  }
   const mode=p.progress_mode||"custom";
   if(mode==="time"){
     const ids=new Set(planTasks(p.id).map(t=>t.id));
     const actual=S.execs.filter(e=>ids.has(e.task_id)&&localDay(e.started_at)===d).reduce((n,e)=>n+Number(e.actual_minutes||0),0);
     const target=Number(p.daily_target_minutes||0);
-    return{mode,label:p.title,value:actual,target,unit:"분",text:mins(actual)+" / "+mins(target)}
+    return{mode,label:p.title,value:actual,target,unit:"분",record:null,text:mins(actual)+" / "+mins(target)}
   }
   const item=primaryProgressItem(p);
-  if(!item)return{mode:"custom",label:p.title,value:0,target:0,unit:"",text:"진행 기준 미설정"};
+  if(!item)return{mode:"custom",label:p.title,value:0,target:0,unit:"",record:null,text:"진행 기준 미설정"};
   const dayEvents=completionEventsOnDay(d),eventIds=new Set(dayEvents.map(e=>e.task_id));
   const amount=planTasks(p.id).filter(t=>eventIds.has(t.id)&&t.status==="completed").reduce((n,t)=>n+Number(t.progress_amount||0),0);
   const target=Number(item.daily_target_value||0);
-  return{mode,label:p.title,value:amount,target,unit:item.unit||"",text:num(amount)+" / "+num(target)+(item.unit||"")}
+  return{mode,label:p.title,value:amount,target,unit:item.unit||"",record:null,text:num(amount)+" / "+num(target)+(item.unit||"")}
 }
 
 function drawTodayGoalProgress(){
@@ -2603,8 +2626,12 @@ function drawTodayGoalProgress(){
   if(!plans.length){out.append(el("div","todayGoalEmpty","이 날짜에 진행 중인 목표가 없습니다."));return}
   plans.forEach(p=>{
     const g=selectedDayPlanProgress(d,p),row=el("div","todayGoalRow"),left=el("div","todayGoalName"),right=el("div","todayGoalValue");
-    left.append(el("strong",null,p.title),el("span","muted",g.mode==="time"?"시간 기준":"직접 단위 기준"));
+    const basis=g.mode==="time"?"시간 기준":"직접 단위 기준";
+    const recordMeta=g.record?("DB 하루 기록 · 할 일 "+g.record.completed_tasks+"/"+g.record.planned_tasks):basis;
+    left.append(el("strong",null,p.title),el("span","muted",recordMeta));
     right.textContent=g.text;
+    row.onclick=()=>openPlanDetail(p.id);
+    row.style.cursor="pointer";
     row.append(left,right);out.append(row)
   })
 }
@@ -2876,7 +2903,7 @@ function drawPlanDetail(){
     $("pdTimeDiff").textContent=num(a.target)+(unit||"");
     $("pdTimeMeta").textContent="현재 완료 수행량 "+num(a.amount)+(unit||"");
   }
-  drawPreviousImprovement();drawPlanHistory();drawProgressItems();drawProgressManager();drawPlanDateStrip();drawDateTasks();drawAllTasks();drawReview();drawPlanTaskReflections();drawReflections();fillTaskProgressSelect()
+  drawPreviousImprovement();drawPlanHistory();drawProgressItems();drawPlanDailyRecords();drawProgressManager();drawPlanDateStrip();drawDateTasks();drawAllTasks();drawReview();drawPlanTaskReflections();drawReflections();fillTaskProgressSelect()
 }
 
 function historyValue(field,v){
@@ -2981,6 +3008,29 @@ function drawPreviousImprovement(){
   if(!refs.length){out.classList.add("hide");return}
   out.classList.remove("hide");out.append(el("strong",null,"이전 계획에서 넘어온 개선점"),el("div",null,refs[0].improvement))
 }
+function drawPlanDailyRecords(){
+  const out=$("planDailyRecords");if(!out)return;clear(out);
+  const rows=S.dailyRecords.filter(r=>r.plan_id===S.plan).sort((a,b)=>b.record_date.localeCompare(a.record_date));
+  if(!rows.length){out.append(el("div","empty","아직 하루 목표 기록이 없습니다."));return}
+  rows.forEach(r=>{
+    const item=el("div","dailyRecordItem");
+    const date=el("div","dailyRecordDate",fmtLongDate(r.record_date));
+    const main=el("div","dailyRecordMain");
+    const title=r.progress_mode==="time"?"시간 목표":"직접 단위 목표";
+    main.append(
+      el("div","dailyRecordTitle",title),
+      el("div","dailyRecordMeta","할 일 "+r.completed_tasks+" / "+r.planned_tasks+" 완료 · DB 저장")
+    );
+    const value=el("div","dailyRecordValue",
+      r.progress_mode==="time"
+        ?(mins(r.actual_value)+" / "+mins(r.target_value))
+        :(num(r.actual_value)+" / "+num(r.target_value)+(r.unit||""))
+    );
+    item.onclick=()=>{S.planDate=r.record_date;drawPlanDateStrip();drawDateTasks()};
+    item.append(date,main,value);out.append(item)
+  })
+}
+
 function drawProgressItems(){
   const out=$("pdProgressItems");clear(out),p=S.plans.find(x=>x.id===S.plan),a=activityProgress(S.plan);
   if(!p){out.append(el("div","empty","진행 기준이 없습니다."));return}
@@ -3372,7 +3422,7 @@ $("newPlanBtn").onclick=()=>openPlanForm();
 
 /* EXPORT */
 $("exportBtn").onclick=()=>{
-  const data={exported_at:new Date().toISOString(),timezone:"Asia/Seoul",plans:S.plans,plan_history:S.history,plan_progress_items:S.progress,tasks:S.tasks,execution_records:S.execs,completion_events:S.events,task_reflections:S.taskRefs,reflections:S.refs,important_dates:S.importantDates};
+  const data={exported_at:new Date().toISOString(),timezone:"Asia/Seoul",plans:S.plans,plan_history:S.history,plan_progress_items:S.progress,tasks:S.tasks,execution_records:S.execs,completion_events:S.events,task_reflections:S.taskRefs,reflections:S.refs,important_dates:S.importantDates,daily_goal_records:S.dailyRecords};
   const u=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"})),a=document.createElement("a");a.href=u;a.download="pds-diary-export.json";a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)
 };
 
@@ -3408,8 +3458,15 @@ async function autoCompleteEligiblePlans(){
   return true
 }
 
+async function syncTodayDailyGoalRecords(){
+  const d=today();
+  const active=S.plans.filter(p=>(p.status||"active")==="active"&&p.start_date<=d&&p.end_date>=d);
+  if(active.length)await Promise.all(active.map(p=>rpc("sync_daily_goal_record",{p_plan_id:p.id,p_record_date:d})));
+  S.dailyRecords=await api("daily_goal_records?select=*&order=record_date.asc,created_at.asc")
+}
+
 async function load(skipAutoComplete=false){
-  [S.plans,S.history,S.progress,S.tasks,S.execs,S.refs,S.taskRefs,S.events,S.importantDates]=await Promise.all([
+  [S.plans,S.history,S.progress,S.tasks,S.execs,S.refs,S.taskRefs,S.events,S.importantDates,S.dailyRecords]=await Promise.all([
     api("plans?select=*&order=start_date.asc,created_at.asc"),
     api("plan_history?select=*&order=changed_at.desc"),
     api("plan_progress_items?select=*&order=created_at.asc"),
@@ -3418,12 +3475,14 @@ async function load(skipAutoComplete=false){
     api("reflections?select=*&order=created_at.desc"),
     api("task_reflections?select=*&order=updated_at.desc"),
     api("completion_events?select=*&order=completed_at.desc"),
-    api("important_dates?select=*&order=date.asc,created_at.asc")
+    api("important_dates?select=*&order=date.asc,created_at.asc"),
+    api("daily_goal_records?select=*&order=record_date.asc,created_at.asc")
   ]);
   if(!skipAutoComplete){
     const changed=await autoCompleteEligiblePlans();
     if(changed)return load(true)
   }
+  await syncTodayDailyGoalRecords();
   cleanupTimerStorage();
   if(!S.mainDate)S.mainDate=today();
   if(!S.planDate)S.planDate=today();
