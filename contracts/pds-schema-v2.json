@@ -156,6 +156,29 @@
       "constraints": [
         "trimmed title must not be empty"
       ]
+    },
+    "daily_goal_records": {
+      "primary_key": "id",
+      "fields": {
+        "id": "uuid",
+        "plan_id": "uuid",
+        "record_date": "date",
+        "progress_mode": "text(time|custom)",
+        "target_value": "numeric",
+        "actual_value": "numeric",
+        "unit": "text",
+        "planned_tasks": "integer",
+        "completed_tasks": "integer",
+        "created_at": "timestamptz",
+        "updated_at": "timestamptz"
+      },
+      "constraints": [
+        "unique(plan_id, record_date)",
+        "target_value >= 0",
+        "actual_value >= 0",
+        "planned_tasks >= 0",
+        "completed_tasks >= 0"
+      ]
     }
   },
   "relationships": [
@@ -168,12 +191,19 @@
     "plans 1:N reflections (ON DELETE CASCADE)",
     "reflections N:1 plans via next_plan_id (ON DELETE SET NULL)",
     "tasks 1:0..1 task_reflections (ON DELETE CASCADE)",
-    "plans.primary_progress_item_id -> plan_progress_items.id (ON DELETE SET NULL)"
+    "plans.primary_progress_item_id -> plan_progress_items.id (ON DELETE SET NULL)",
+    "plans 1:N daily_goal_records (ON DELETE CASCADE)"
   ],
   "triggers": {
     "plans_snapshot_before_update": "Before relevant plan fields change, save OLD values to plan_history.",
     "plans_set_updated_at": "Refresh plans.updated_at before update.",
-    "trg_sync_plan_progress_targets": "When plan dates change, recalculate progress-item total targets."
+    "trg_sync_plan_progress_targets": "When plan dates change, recalculate progress-item total targets.",
+    "tasks_sync_daily_goal": "When a task is created, edited, soft-deleted, moved, or deleted, refresh the affected plan/date daily goal record.",
+    "execution_records_sync_daily_goal": "When execution time changes, refresh the affected plan/date daily goal record.",
+    "completion_events_sync_daily_goal": "When completion evidence changes, refresh the affected plan/date daily goal record.",
+    "plans_sync_daily_goal": "When a plan's dates/status/progress basis changes, refresh existing daily goal records and today's record when applicable.",
+    "plans_sync_daily_goal_insert": "When an active plan is created for today, create today's daily goal record.",
+    "plan_progress_items_sync_daily_goal": "When a custom progress basis changes, refresh that plan's daily goal records."
   },
   "functions": {
     "complete_task": {
@@ -189,6 +219,14 @@
       ],
       "returns": "tasks",
       "notes": "Returns the task to todo and removes only the completion_event for the current completion_version. execution_records and task_reflections are preserved."
+    },
+    "sync_daily_goal_record": {
+      "args": [
+        "p_plan_id uuid",
+        "p_record_date date"
+      ],
+      "returns": "daily_goal_records",
+      "notes": "Upserts one DB-backed daily goal record from the plan's daily target plus linked tasks, completion evidence, and execution records. Time mode stores minutes; custom mode stores the configured unit."
     }
   },
   "rules": [
@@ -210,6 +248,11 @@
     "important_dates stores user-defined calendar dates independently from plans and tasks.",
     "The monthly calendar and weekly date strip share the same selected date.",
     "Full JSON export includes plans, plan_history, plan_progress_items, tasks, execution_records, completion_events, task_reflections, reflections, and important_dates.",
-    "The browser uses only a publishable Supabase key; service_role and secret keys must not be included in client code."
+    "The browser uses only a publishable Supabase key; service_role and secret keys must not be included in client code.",
+    "daily_goal_records stores one summary row per big goal and date.",
+    "A daily goal record keeps the day's progress basis, target, actual amount, planned task count, and completed task count.",
+    "Existing daily goal records are derived from real plans/tasks/completion events/execution records; missing past activity is not fabricated.",
+    "The current day's record can be synchronized for active plans so the daily target exists in the DB even before actual execution time is recorded.",
+    "Full JSON export includes daily_goal_records."
   ]
 }
