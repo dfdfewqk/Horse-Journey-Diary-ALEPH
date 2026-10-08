@@ -2028,7 +2028,31 @@ input:focus,select:focus,textarea:focus{
             <div class="field"><label>시작일</label><input id="nStart" type="date"></div>
             <div class="field"><label>종료일</label><input id="nEnd" type="date"></div>
             <div class="field"><label>우선순위</label><select id="nPriority"><option value="high">높음</option><option value="medium">중간</option><option value="low">낮음</option></select></div>
-            <div class="field"><label>진행 기준</label><div id="nextBasisPreview" class="contextBox">현재 목표의 진행 기준을 이어받습니다.</div></div>
+            <div class="field">
+              <label>진행 기준</label>
+              <select id="nProgressMode">
+                <option value="time">시간 기준</option>
+                <option value="custom">직접 단위</option>
+              </select>
+            </div>
+            <div class="field" id="nTimeTargetField">
+              <label>하루 목표 시간</label>
+              <div class="durationPair">
+                <input id="nDailyHour" type="number" min="0" step="1" value="1">
+                <span>시간</span>
+                <input id="nDailyMinute" type="number" min="0" max="59" step="1" value="0">
+                <span>분</span>
+              </div>
+            </div>
+            <div class="field full hide" id="nCustomTargetField">
+              <label>하루 직접 기준</label>
+              <div class="addProgressGrid">
+                <input id="nCustomName" placeholder="예: 문제 풀이">
+                <input id="nCustomDaily" type="number" min="0.01" step="any" placeholder="1">
+                <input id="nCustomUnit" placeholder="회">
+                <div class="contextBox" style="margin:0">하루 기준</div>
+              </div>
+            </div>
             <div class="field full"><label>성공 기준</label><textarea id="nCriteria"></textarea></div>
           </div>
           <button class="btn primary" id="saveNextBtn">개선점 + 다음 목표 저장</button>
@@ -3230,33 +3254,63 @@ function drawReflections(){
   const out=$("reflections");clear(out);S.refs.filter(r=>r.plan_id===S.plan).forEach(r=>{const e=el("div","reflectionItem");e.append(el("div",null,r.improvement));const next=S.plans.find(p=>p.id===r.next_plan_id);if(next){const b=el("button","btn ghost","다음 목표 · "+next.title);b.style.marginTop="7px";b.onclick=()=>{closeModal("planDetailModal");openPlanDetail(next.id)};e.append(b)}out.append(e)})
 }
 $("saveReflectionBtn").onclick=async()=>{try{const v=$("improvement").value.trim();if(!v)throw new Error("개선점을 입력하세요.");await api("reflections",{method:"POST",body:JSON.stringify({plan_id:S.plan,improvement:v})});$("improvement").value="";await load();drawReflections();toast("개선점을 저장했습니다.")}catch(e){toast(e.message)}};
+function updateNextProgressModeUI(){
+  const mode=$("nProgressMode").value;
+  $("nTimeTargetField").classList.toggle("hide",mode!=="time");
+  $("nCustomTargetField").classList.toggle("hide",mode!=="custom")
+}
+$("nProgressMode").addEventListener("change",updateNextProgressModeUI);
 $("toggleNextBtn").onclick=()=>{
   $("nextPlanBox").classList.toggle("hide");
   if(!$("nextPlanBox").classList.contains("hide")){
     $("nStart").value=today();$("nEnd").value=today();
-    const p=S.plans.find(x=>x.id===S.plan),item=primaryProgressItem(p);
-    $("nextBasisPreview").textContent=(p?.progress_mode==="time")
-      ?("시간 기준 · 하루 "+mins(p.daily_target_minutes))
-      :(item?("직접 단위 · 하루 "+num(item.daily_target_value)+item.unit):"현재 목표의 진행 기준을 이어받습니다.")
+    const p=S.plans.find(x=>x.id===S.plan),item=primaryProgressItem(p),mode=p?.progress_mode||"time";
+    $("nProgressMode").value=mode;
+    const dailyMinutes=Math.max(0,Number(p?.daily_target_minutes||60));
+    $("nDailyHour").value=Math.floor(dailyMinutes/60);
+    $("nDailyMinute").value=dailyMinutes%60;
+    $("nCustomName").value=item?.name||"";
+    $("nCustomDaily").value=item?.daily_target_value??"";
+    $("nCustomUnit").value=item?.unit||"";
+    updateNextProgressModeUI()
   }
 };
 $("saveNextBtn").onclick=async()=>{try{
   const improvement=$("improvement").value.trim();if(!improvement)throw new Error("개선점을 입력하세요.");
-  const cur=S.plans.find(x=>x.id===S.plan),mode=cur?.progress_mode||"custom";
-  const d={title:$("nTitle").value.trim(),start_date:$("nStart").value,end_date:$("nEnd").value,priority:$("nPriority").value,estimated_minutes:mode==="time"?Number(cur?.daily_target_minutes||0)*Math.max(1,daysBetween($("nStart").value,$("nEnd").value)+1):0,success_criteria:$("nCriteria").value.trim(),progress_mode:mode,daily_target_minutes:mode==="time"?cur?.daily_target_minutes:null};
-  if(!d.title||!d.start_date||!d.end_date||!d.success_criteria)throw new Error("다음 목표을 입력하세요.");if(d.end_date<d.start_date)throw new Error("종료일을 확인하세요.");
+  const mode=$("nProgressMode").value;
+  const startDate=$("nStart").value,endDate=$("nEnd").value;
+  if(endDate<startDate)throw new Error("종료일을 확인하세요.");
+  const totalDays=Math.max(1,daysBetween(startDate,endDate)+1);
+  const dailyMinutes=Math.max(0,Number($("nDailyHour").value||0)*60+Number($("nDailyMinute").value||0));
+  const customName=$("nCustomName").value.trim(),customDaily=Number($("nCustomDaily").value),customUnit=$("nCustomUnit").value.trim();
+  if(mode==="time"&&dailyMinutes<=0)throw new Error("하루 목표 시간을 입력하세요.");
+  if(mode==="custom"&&(!customName||customDaily<=0||!customUnit))throw new Error("하루 직접 기준과 단위를 입력하세요.");
+  const d={
+    title:$("nTitle").value.trim(),
+    start_date:startDate,
+    end_date:endDate,
+    priority:$("nPriority").value,
+    estimated_minutes:mode==="time"?dailyMinutes*totalDays:0,
+    success_criteria:$("nCriteria").value.trim(),
+    progress_mode:mode,
+    daily_target_minutes:mode==="time"?dailyMinutes:null
+  };
+  if(!d.title||!d.start_date||!d.end_date||!d.success_criteria)throw new Error("다음 목표를 입력하세요.");
   const rows=await api("plans",{method:"POST",body:JSON.stringify(d)}),np=rows?.[0];if(!np?.id)throw new Error("다음 목표 저장에 실패했습니다.");
   if(mode==="custom"){
-    const src=primaryProgressItem(cur);
-    if(src){
-      const totalDays=planDays(np),created=await api("plan_progress_items",{method:"POST",body:JSON.stringify({plan_id:np.id,name:src.name,daily_target_value:Number(src.daily_target_value),target_value:Number(src.daily_target_value)*totalDays,unit:src.unit})}),item=created?.[0];
-      if(item?.id)await api("plans?id=eq."+np.id,{method:"PATCH",body:JSON.stringify({primary_progress_item_id:item.id})})
-    }
-  }else if(Number(cur?.daily_target_minutes||0)>0){
-    await api("plans?id=eq."+np.id,{method:"PATCH",body:JSON.stringify({estimated_minutes:Number(cur.daily_target_minutes)*planDays(np)})})
+    const created=await api("plan_progress_items",{method:"POST",body:JSON.stringify({
+      plan_id:np.id,
+      name:customName,
+      daily_target_value:customDaily,
+      target_value:customDaily*totalDays,
+      unit:customUnit
+    })}),item=created?.[0];
+    if(item?.id)await api("plans?id=eq."+np.id,{method:"PATCH",body:JSON.stringify({primary_progress_item_id:item.id})})
   }
   await api("reflections",{method:"POST",body:JSON.stringify({plan_id:S.plan,improvement,next_plan_id:np.id})});
-  $("improvement").value="";$("nTitle").value="";$("nCriteria").value="";$("nextPlanBox").classList.add("hide");await load();drawReflections();toast("개선점을 다음 목표에 연결했습니다.")
+  $("improvement").value="";$("nTitle").value="";$("nCriteria").value="";
+  $("nextPlanBox").classList.add("hide");
+  await load();drawReflections();toast("개선점을 다음 목표에 연결했습니다.")
 }catch(e){toast(e.message)}};
 
 /* FORMS SAVE */
