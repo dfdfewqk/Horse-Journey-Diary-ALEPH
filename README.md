@@ -15,3 +15,14 @@ T06 최종본을 기준으로 인증·권한 검증을 추가하는 T07 저장�
 - Source: https://github.com/dfdfewqk/ALEPH-7-
 
 GitHub Pages workflow is also included, but the Supabase Edge URL above is the immediately deployed result URL.
+
+
+## Canonical submission source
+
+T07 작업은 이 저장소에서 진행하지만, T06 commit ancestry 요구사항을 만족하기 위해 최종 제출용 소스 이력은 다음 브랜치에 미러링한다.
+
+- Repository: `dfdfewqk/Horse-Journey-Diary-ALEPH`
+- Branch: `t07-aleph7`
+- T06 ancestor: `6949cabd358e0290332172c7be9604200ac7fcb7`
+
+Git compare 결과에서 `t07-aleph7`는 위 T06 commit을 merge-base로 가지며 ahead 상태다.
