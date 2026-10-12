@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="pds-build" content="2026-10-12-t07-server-derived-days-v4">
+<meta name="pds-build" content="2026-10-12-t07-claim-feedback-v5">
 <title>말과 함께 성장하는 다이어리</title>
 <style>
 :root{
@@ -1782,7 +1782,7 @@ input:focus,select:focus,textarea:focus{
 </section>
 <main id="appShell" class="hide">
 <div id="sessionBar" class="sessionBar">
-  <div><strong>🔒 로그인된 다이어리</strong><div id="sessionInfo" class="sessionInfo">내 계정 자료만 표시됩니다.</div></div>
+  <div><strong>🔒 로그인된 다이어리</strong><div id="sessionInfo" class="sessionInfo">내 계정 자료만 표시됩니다.</div><div id="legacyClaimFeedback" class="sessionInfo" role="status" aria-live="polite"></div></div>
   <div class="sessionActions">
     <button id="requestLegacyBtn" class="btn ghost" type="button">기존 T06 자료 연결 요청</button>
     <button id="securityCheckBtn" class="btn ghost" type="button">보안 확인</button>
@@ -2505,12 +2505,38 @@ $("passwordChangeForm").onsubmit=async e=>{
   setAuthStatus("비밀번호를 변경했습니다. 새 비밀번호로 다시 로그인해 주세요.")
 };
 $("requestLegacyBtn").onclick=async()=>{
+  const btn=$("requestLegacyBtn"), feedback=$("legacyClaimFeedback");
+  btn.disabled=true;
+  feedback.textContent="연결 요청을 서버에 저장하고 확인하는 중입니다.";
   try{
-    await api("claim_requests",{method:"POST",body:"{}"});
-    toast("기존 T06 자료 연결 요청을 남겼습니다.")
+    const inserted=await api("claim_requests",{method:"POST",body:"{}"});
+    const row=Array.isArray(inserted)?inserted[0]:null;
+    if(!row?.id)throw new Error("서버에서 접수 번호를 돌려주지 않았습니다.");
+    const verified=await api("claim_requests?select=id,status&order=requested_at.desc&limit=5");
+    if(!Array.isArray(verified)||!verified.some(r=>r.id===row.id)){
+      throw new Error("요청을 저장했지만 다시 조회하여 확인하지 못했습니다.");
+    }
+    feedback.textContent="기존 T06 자료 연결 요청이 정상 접수되었습니다. 자료 연결을 기다리는 중입니다.";
+    btn.textContent="기존 T06 자료 연결 요청 접수됨";
+    toast("기존 T06 자료 연결 요청이 접수되었습니다.");
   }catch(e){
-    if(String(e.message).toLowerCase().includes("duplicate"))toast("이미 연결 요청이 있습니다.");
-    else toast("연결 요청을 확인하지 못했습니다.")
+    console.error("T07 legacy claim error",e);
+    const message=String(e?.message||"요청을 확인하지 못했습니다.");
+    let existing=false;
+    if(message.toLowerCase().includes("duplicate")||message.includes("23505")){
+      try{
+        const rows=await api("claim_requests?select=id,status&limit=1");
+        existing=Array.isArray(rows)&&rows.length>0;
+      }catch{}
+    }
+    if(existing){
+      feedback.textContent="기존 T06 자료 연결 요청이 이미 접수되어 있습니다.";
+      btn.textContent="기존 T06 자료 연결 요청 접수됨";
+      return;
+    }
+    feedback.textContent="연결 요청이 확인되지 않았습니다. 서버 오류: "+message.slice(0,180);
+    toast("연결 요청 실패 — 로그인 화면 상단의 오류 내용을 확인해 주세요.");
+    btn.disabled=false;
   }
 };
 $("deleteAccountBtn").onclick=async()=>{
@@ -3968,6 +3994,20 @@ async function load(skipAutoComplete=false){
   S.observations=observations||[];
   S.ruleChanges=ruleChanges||[];
   $("requestLegacyBtn").classList.toggle("hide",S.plans.length>0);
+  if(!S.plans.length){
+    try{
+      const claims=await api("claim_requests?select=id,status&order=requested_at.desc&limit=1");
+      const already=Array.isArray(claims)&&claims.length>0;
+      $("requestLegacyBtn").disabled=already;
+      $("requestLegacyBtn").textContent=already?"기존 T06 자료 연결 요청 접수됨":"기존 T06 자료 연결 요청";
+      $("legacyClaimFeedback").textContent=already?"기존 T06 자료 연결 요청이 접수되어 있습니다. 자료 연결 대기 중입니다.":"기존 자료 연결 요청이 아직 접수되지 않았습니다.";
+    }catch(e){
+      console.error("T07 claim status check failed",e);
+      $("legacyClaimFeedback").textContent="기존 자료 연결 상태를 확인하지 못했습니다: "+String(e?.message||"오류").slice(0,120);
+    }
+  }else{
+    $("legacyClaimFeedback").textContent="";
+  }
   if(!skipAutoComplete){
     const changed=await autoCompleteEligiblePlans();
     if(changed)return load(true)
