@@ -109,3 +109,23 @@
 - 전체 합계:
 - 전체 평균:
 - 손 계산 대조:
+
+
+## 자동 사전 점검
+
+- T06 고정 commit ancestry: **PASS**
+  - base / merge-base: `6949cabd358e0290332172c7be9604200ac7fcb7`
+  - T07 source branch: `dfdfewqk/Horse-Journey-Diary-ALEPH:t07-aleph7`
+- T07 HTML JavaScript 문법 검사: **PASS**
+- 중복 HTML id 검사: **PASS**
+- T07 테이블 anon 권한: **0건**
+- 보안 Advisor: leaked-password protection 미활성화 1건만 남음
+- GitHub 저장소 secret 문자열 검색:
+  - `service_role` 원문: 없음
+  - `sb_secret`: 없음
+  - 실제 JWT / access token / refresh token 원문: 없음
+- Edge Function:
+  - `t07-protected` ACTIVE
+  - `t07-delete-account` ACTIVE
+
+사용자 계정과 실제 HTTP 요청이 필요한 카드 1~5 증거는 아래 대기 항목에 실제 결과만 추가한다.
