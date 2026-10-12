@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="pds-build" content="2026-10-08-daily-goal-records-v1">
+<meta name="pds-build" content="2026-10-12-t07-server-derived-days-v4">
 <title>말과 함께 성장하는 다이어리</title>
 <style>
 :root{
@@ -1712,10 +1712,86 @@ input:focus,select:focus,textarea:focus{
   }
 }
 
+
+/* T07 AUTH */
+.authGate{min-height:100vh;display:grid;place-items:center;padding:24px;background:linear-gradient(180deg,#f7f4ee 0,#eef2eb 100%)}
+.authCard{width:min(480px,100%);background:#fff;border:1px solid var(--line);border-radius:24px;padding:24px;box-shadow:var(--shadow)}
+.authBrand{font-size:11px;font-weight:900;letter-spacing:.16em;color:var(--accent)}
+.authTitle{font-size:32px;font-weight:950;letter-spacing:-.04em;margin:8px 0 6px}
+.authDesc{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:18px}
+.authTabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.authTabs button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.authForm{display:grid;gap:12px}
+.authForm label{display:grid;gap:6px;font-size:12px;font-weight:800}
+.authForm input{width:100%;border:1px solid var(--line);border-radius:11px;padding:11px 12px;background:#fff}
+.authStatus{margin-top:12px;padding:10px 12px;border-radius:11px;background:#f5f7f3;color:#4f5a4c;font-size:12px;line-height:1.5;min-height:38px}
+.authStatus.error{background:#fff0f0;color:#8d3f3f}
+.sessionBar{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 12px;margin-bottom:12px;border:1px solid var(--line);border-radius:13px;background:#fff}
+.sessionInfo{font-size:11px;color:var(--muted)}
+.sessionActions{display:flex;gap:7px;flex-wrap:wrap}
+.t07LockNotice{margin-top:15px;padding:12px 14px;border:1px solid #cfdcc9;background:#f4f8f1;color:#455541;border-radius:14px;font-size:13px;line-height:1.5}
+
+
+/* T07 EXPERIMENT */
+.experimentCard{display:grid;gap:14px}
+.experimentForm{display:grid;gap:12px}
+.experimentFields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.experimentFields .full{grid-column:1/-1}
+.experimentFields label{display:grid;gap:6px;font-size:11px;font-weight:900;color:#586354}
+.experimentFields input,.experimentFields textarea,.experimentFields select{width:100%;border:1px solid var(--line);border-radius:10px;padding:9px 10px;background:#fff}
+.experimentDays{display:grid;gap:8px}
+.experimentDay{display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:13px;background:#fff}
+.experimentDay strong{font-size:12px}.experimentDay span{font-size:10px;color:var(--muted)}
+.experimentSummary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.experimentSummary>div{padding:10px;border:1px solid var(--line);border-radius:12px;background:#fafbf8}
+.experimentSummary span{display:block;font-size:10px;color:var(--muted)}.experimentSummary strong{display:block;margin-top:4px;font-size:16px}
+.ruleChangeBox{border:1px solid #dccfb7;background:#fffaf0;border-radius:14px;padding:12px}
+@media(max-width:680px){.experimentFields{grid-template-columns:1fr}.experimentFields .full{grid-column:auto}.experimentSummary{grid-template-columns:repeat(2,1fr)}.experimentDay{grid-template-columns:1fr auto}.experimentDay>div:first-child{grid-column:1/-1}}
+
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
 </head>
 <body>
-<main>
+<section id="authGate" class="authGate">
+  <div class="authCard">
+    <div class="authBrand">ALEPH 7 · PLAN DO SEE NEXT</div>
+    <div class="authTitle">플랜두씨 다이어리 2</div>
+    <div class="authDesc">로그인한 계정의 기록만 열립니다. 비밀번호는 화면이나 제출 기록에 남기지 않습니다.</div>
+    <div class="authTabs">
+      <button class="btn active" id="showLoginBtn" type="button">로그인</button>
+      <button class="btn" id="showSignupBtn" type="button">회원가입</button>
+    </div>
+    <form id="loginForm" class="authForm">
+      <label>이메일<input id="loginEmail" type="email" autocomplete="username" required></label>
+      <label>비밀번호<input id="loginPassword" type="password" autocomplete="current-password" required></label>
+      <button class="btn primary" type="submit">로그인</button>
+    </form>
+    <form id="signupForm" class="authForm hide">
+      <label>이메일<input id="signupEmail" type="email" autocomplete="username" required></label>
+      <label>비밀번호<input id="signupPassword" type="password" autocomplete="new-password" minlength="6" required></label>
+      <label>비밀번호 확인<input id="signupPassword2" type="password" autocomplete="new-password" minlength="6" required></label>
+      <button class="btn primary" type="submit">학습용 계정 만들기</button>
+    </form>
+    <div id="authStatus" class="authStatus">로그인하면 내 다이어리만 불러옵니다.</div>
+    <div class="actions" style="margin-top:10px">
+      <button id="anonProtectedTestBtn" class="btn ghost" type="button">비로그인 보호 요청 확인</button>
+      <button id="revokedSessionTestBtn" class="btn ghost hide" type="button">로그아웃된 세션 재요청 확인</button>
+    </div>
+    <div id="loggedOutSecurityResult" class="contextBox hide" style="margin-top:10px"></div>
+  </div>
+</section>
+<main id="appShell" class="hide">
+<div id="sessionBar" class="sessionBar">
+  <div><strong>🔒 로그인된 다이어리</strong><div id="sessionInfo" class="sessionInfo">내 계정 자료만 표시됩니다.</div></div>
+  <div class="sessionActions">
+    <button id="requestLegacyBtn" class="btn ghost" type="button">기존 T06 자료 연결 요청</button>
+    <button id="securityCheckBtn" class="btn ghost" type="button">보안 확인</button>
+    <button id="changePasswordBtn" class="btn ghost" type="button">비밀번호 변경</button>
+    <button id="deleteAccountBtn" class="btn ghost" type="button">계정 삭제</button>
+    <button id="logoutBtn" class="btn danger" type="button">로그아웃</button>
+  </div>
+</div>
+
 <header class="siteHeader">
   <div class="titleRow">
     <div class="horseEmblem" aria-hidden="true"><svg class="horseshoeSvg headerHorseshoe" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5.5 3.5v7.1a6.5 6.5 0 0 0 13 0V3.5h-3.6v7.1a2.9 2.9 0 1 1-5.8 0V3.5z" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7.2" cy="5.3" r=".75" fill="currentColor"/><circle cx="7.2" cy="9" r=".75" fill="currentColor"/><circle cx="16.8" cy="5.3" r=".75" fill="currentColor"/><circle cx="16.8" cy="9" r=".75" fill="currentColor"/></svg></div>
@@ -1726,7 +1802,7 @@ input:focus,select:focus,textarea:focus{
     </div>
     <div id="todayLabel" class="todayBadge"></div>
   </div>
-  <div class="notice">지금은 로그인이 없어 링크를 아는 사람은 누구나 볼 수 있습니다. 남이 봐도 괜찮은 내용만 넣으세요</div>
+  <div class="t07LockNotice">로그인한 계정의 자료만 표시됩니다. 로그아웃하면 다이어리 자료 화면은 다시 잠깁니다.</div>
   <div class="horseHero" aria-label="말과 함께 성장하는 다이어리">
     <div class="heroCopy">
       <div class="heroEyebrow">MY HORSE JOURNEY</div>
@@ -1806,6 +1882,52 @@ input:focus,select:focus,textarea:focus{
 <section class="section achievedSection" data-theme-label="TOGETHER WE GREW">
   <div class="head"><div><div class="sectionKicker">TOGETHER WE GREW</div><h2>내가 해낸 일</h2></div></div>
   <div id="achievedGoals" class="doneGroups"></div>
+</section>
+
+<section class="section" id="t07ExperimentSection" data-theme-label="T07 · 5 DAY TEST">
+  <div class="head">
+    <div><div class="sectionKicker">T07 · 5 DAY TEST</div><h2>잠긴 앱 5일 사용 기록</h2></div>
+    <span id="experimentProgress" class="pill">0 / 5일</span>
+  </div>
+  <div class="journalCard experimentCard">
+    <div id="experimentSetupFormWrap" class="experimentForm">
+      <div class="journalTitle">1일차 시작 전에 규칙 고정</div>
+      <div class="experimentFields">
+        <label>관찰할 목표<select id="expPlanId"></select></label>
+        <label>지표<input id="expMetricName" value="실제 수행 시간" readonly></label>
+        <label>단위<input id="expUnit" value="분" readonly></label>
+        <label>주 시작 요일<select id="expWeekStart"><option value="월요일">월요일</option><option value="일요일">일요일</option></select></label>
+        <label class="full">질문<input id="expQuestion" value="계획 규칙을 바꾸면 하루 실제 수행 시간이 달라지는가?"></label>
+        <label class="full">계산 규칙<textarea id="expCalcRule" readonly>선택한 목표의 해당 날짜 execution_records.actual_minutes 합계</textarea></label>
+        <label class="full">처음 계획 규칙<input id="expInitialRule" placeholder="예: 하루 목표 시간 60분"></label>
+        <label>누락값 처리<input id="expMissingRule" value="실행 기록이 없으면 0분으로 처리" readonly></label>
+        <label>중복값 처리<input id="expDuplicateRule" value="같은 execution_record ID는 한 번만 계산" readonly></label>
+        <label>이상치 처리<input id="expOutlierRule" value="값이 커도 삭제하지 않고 그대로 사용" readonly></label>
+        <label>반올림<input id="expRoundingRule" value="평균은 소수 첫째 자리에서 반올림하여 정수로 표시" readonly></label>
+      </div>
+      <button id="saveExperimentSetupBtn" class="btn primary" type="button">5일 실험 시작 설정 저장</button>
+    </div>
+
+    <div id="experimentSetupSaved" class="contextBox hide"></div>
+
+    <div class="actions">
+      <button id="saveTodayObservationBtn" class="btn primary" type="button">오늘 실행 기록을 Day로 저장</button>
+    </div>
+
+    <div id="experimentDays" class="experimentDays"></div>
+
+    <div id="ruleChangeBox" class="ruleChangeBox hide">
+      <div class="journalTitle">Day 2 뒤 · Day 3 전에 계획 규칙 한 번 변경</div>
+      <div class="experimentFields">
+        <label>새 하루 목표 시간(분)<input id="expNewDailyMinutes" type="number" min="1" step="1" placeholder="예: 70"></label>
+        <label class="full">바꾸는 이유<textarea id="expRuleReason" placeholder="왜 이 규칙으로 바꾸는지 적어 주세요."></textarea></label>
+      </div>
+      <button id="saveRuleChangeBtn" class="btn primary" type="button">규칙 변경 저장</button>
+    </div>
+
+    <div id="experimentSummary" class="experimentSummary"></div>
+    <div class="muted">Day 1·2 저장 뒤 규칙 변경을 완료해야 Day 3을 저장할 수 있습니다. 날짜는 Asia/Seoul 기준 오늘 날짜로 자동 기록됩니다.</div>
+  </div>
 </section>
 
 <section class="section overdueSection">
@@ -2163,14 +2285,40 @@ input:focus,select:focus,textarea:focus{
   </div>
 </div>
 
+<!-- T07 SECURITY EVIDENCE -->
+<div class="modal" id="securityModal">
+  <div class="dialog">
+    <div class="modalHead"><h2>보안 확인</h2><button class="btn ghost closeModal" type="button">닫기</button></div>
+    <div class="dialogBody">
+      <div class="contextBox">토큰 원문은 표시하지 않습니다. 같은 보호 API 주소와 POST 방식으로 로그인 전·후 결과를 비교합니다.</div>
+      <div id="sessionMetadata" class="contextBox" style="margin-top:10px"></div>
+      <div id="securityResult" class="contextBox" style="margin-top:10px"></div>
+      <button id="runLoggedInProtectedTestBtn" class="btn primary" type="button" style="margin-top:10px;width:100%">로그인 상태 보호 요청 실행</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="passwordModal">
+  <div class="dialog">
+    <div class="modalHead"><h2>비밀번호 변경</h2><button class="btn ghost closeModal" type="button">닫기</button></div>
+    <div class="dialogBody">
+      <form id="passwordChangeForm" class="authForm">
+        <label>현재 비밀번호<input id="currentPassword" type="password" autocomplete="current-password" required></label>
+        <label>새 비밀번호<input id="newPassword" type="password" autocomplete="new-password" minlength="8" required></label>
+        <label>새 비밀번호 확인<input id="newPassword2" type="password" autocomplete="new-password" minlength="8" required></label>
+        <button class="btn primary" type="submit">비밀번호 변경</button>
+      </form>
+      <div class="muted" style="margin-top:10px">변경 뒤 현재 세션을 종료하고 로그인 화면으로 돌아갑니다. 비밀번호 원문은 앱 기록에 저장하지 않습니다.</div>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <script>
-const U="https://bcwzllejypavwgsfqfbm.supabase.co";
-const K="sb_publishable_rQOSzVLPSmRGAAGfnV5CVw_ZsyWj-4Z";
-const H={apikey:K,Authorization:"Bearer "+K,"Content-Type":"application/json",Prefer:"return=representation"};
 const S={
   plans:[],history:[],tasks:[],execs:[],refs:[],taskRefs:[],events:[],progress:[],importantDates:[],dailyRecords:[],
+  experimentSetup:null,observations:[],ruleChanges:[],
   plan:null,mainDate:null,planDate:null,calendarMonth:null,
   editingPlan:null,editingTask:null,finishingTask:null,editingImportantDate:null
 };
@@ -2187,8 +2335,209 @@ function toast(msg){const e=$("toast");e.textContent=msg;e.classList.add("show")
 function openModal(id){$(id).classList.add("open")}function closeModal(id){$(id).classList.remove("open")}
 function clear(e){while(e.firstChild)e.removeChild(e.firstChild)}
 function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e}
-async function api(path,opts={}){const r=await fetch(U+"/rest/v1/"+path,{...opts,headers:{...H,...(opts.headers||{})}});let d=null;try{d=r.status===204?null:await r.json()}catch{}if(!r.ok)throw new Error(d?.message||d?.hint||d?.details||"요청에 실패했습니다.");return d}
-async function rpc(name,body){const r=await fetch(U+"/rest/v1/rpc/"+name,{method:"POST",headers:H,body:JSON.stringify(body)});let d=null;try{d=await r.json()}catch{}if(!r.ok)throw new Error(d?.message||"완료 처리에 실패했습니다.");return d}
+
+const U="https://bcwzllejypavwgsfqfbm.supabase.co";
+const K="sb_publishable_rQOSzVLPSmRGAAGfnV5CVw_ZsyWj-4Z";
+const sb=window.supabase.createClient(U,K,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+let ACCESS_TOKEN=null;
+let LAST_REVOKED_TOKEN=null;
+const TABLE_MAP={
+  plans:"t07_plans",plan_history:"t07_plan_history",plan_progress_items:"t07_plan_progress_items",
+  tasks:"t07_tasks",execution_records:"t07_execution_records",completion_events:"t07_completion_events",
+  reflections:"t07_reflections",task_reflections:"t07_task_reflections",
+  important_dates:"t07_important_dates",daily_goal_records:"t07_daily_goal_records",
+  claim_requests:"t07_claim_requests",experiment_setup:"t07_experiment_setup",
+  daily_observations:"t07_daily_observations",rule_changes:"t07_rule_changes"
+};
+const RPC_MAP={
+  complete_task:"t07_complete_task",
+  cancel_task_completion:"t07_cancel_task_completion",
+  sync_daily_goal_record:"t07_sync_daily_goal_record",
+  apply_rule_change:"t07_apply_rule_change",
+  record_today_observation:"t07_record_today_observation"
+};
+function mapPath(path){
+  const i=path.indexOf("?");
+  const base=i<0?path:path.slice(0,i),rest=i<0?"":path.slice(i);
+  return (TABLE_MAP[base]||base)+rest;
+}
+function authHeaders(extra={}){
+  if(!ACCESS_TOKEN)throw new Error("로그인이 필요합니다.");
+  return {apikey:K,Authorization:"Bearer "+ACCESS_TOKEN,"Content-Type":"application/json",Prefer:"return=representation",...extra};
+}
+async function api(path,opts={}){
+  const r=await fetch(U+"/rest/v1/"+mapPath(path),{...opts,headers:authHeaders(opts.headers||{})});
+  let d=null;try{d=r.status===204?null:await r.json()}catch{}
+  if(!r.ok)throw new Error(d?.message||d?.hint||d?.details||"요청에 실패했습니다.");
+  return d
+}
+async function rpc(name,body){
+  const rpcName=RPC_MAP[name]||name;
+  const r=await fetch(U+"/rest/v1/rpc/"+rpcName,{method:"POST",headers:authHeaders(),body:JSON.stringify(body)});
+  let d=null;try{d=await r.json()}catch{}
+  if(!r.ok)throw new Error(d?.message||"완료 처리에 실패했습니다.");
+  return d
+}
+
+const PROTECTED_EVIDENCE_BODY={resource:"plans",action:"list"};
+async function t07ProtectedRequest(token){
+  const headers={apikey:K,"Content-Type":"application/json"};
+  if(token)headers.Authorization="Bearer "+token;
+  const r=await fetch(U+"/functions/v1/t07-protected",{
+    method:"POST",headers,body:JSON.stringify(PROTECTED_EVIDENCE_BODY)
+  });
+  let data=null;try{data=await r.json()}catch{}
+  return{status:r.status,data}
+}
+function decodeJwtPayload(token){
+  try{
+    const part=token.split(".")[1].replace(/-/g,"+").replace(/_/g,"/");
+    const json=decodeURIComponent(atob(part).split("").map(ch=>"%"+("00"+ch.charCodeAt(0).toString(16)).slice(-2)).join(""));
+    return JSON.parse(json)
+  }catch{return{}}
+}
+function maskedSessionMetadata(token){
+  const p=decodeJwtPayload(token),sid=String(p.session_id||"");
+  const exp=p.exp?new Date(Number(p.exp)*1000).toLocaleString("ko-KR"):"확인 불가";
+  return "JWT 세션 · session_id "+(sid?sid.slice(0,8)+"…":"확인 불가")+" · 만료 "+exp
+}
+function setAuthStatus(message,isError=false){
+  const e=document.getElementById("authStatus");if(!e)return;
+  e.textContent=message;e.classList.toggle("error",!!isError)
+}
+function setAuthMode(mode){
+  const login=mode==="login";
+  $("loginForm").classList.toggle("hide",!login);
+  $("signupForm").classList.toggle("hide",login);
+  $("showLoginBtn").classList.toggle("active",login);
+  $("showSignupBtn").classList.toggle("active",!login);
+  setAuthStatus(login?"로그인하면 내 다이어리만 불러옵니다.":"새 계정을 만든 뒤 로그인해 주세요.")
+}
+async function enterAuthenticatedApp(session){
+  if(!session?.access_token)return showSignedOut();
+  ACCESS_TOKEN=session.access_token;
+  $("authGate").classList.add("hide");
+  $("appShell").classList.remove("hide");
+  $("sessionInfo").textContent="인증된 계정 · 자료는 RLS로 분리됩니다.";
+  try{await load()}catch(e){console.error(e);toast("내 자료를 불러오지 못했습니다.")}
+}
+function clearDiaryState(){
+  S.plans=[];S.history=[];S.tasks=[];S.execs=[];S.refs=[];S.taskRefs=[];S.events=[];S.progress=[];S.importantDates=[];S.dailyRecords=[];S.experimentSetup=null;S.observations=[];S.ruleChanges=[];
+  S.plan=null
+}
+function showSignedOut(){
+  ACCESS_TOKEN=null;clearDiaryState();
+  $("appShell").classList.add("hide");
+  $("authGate").classList.remove("hide");
+  $("revokedSessionTestBtn").classList.toggle("hide",!LAST_REVOKED_TOKEN);
+  setAuthMode("login")
+}
+$("showLoginBtn").onclick=()=>setAuthMode("login");
+$("showSignupBtn").onclick=()=>setAuthMode("signup");
+$("loginForm").onsubmit=async e=>{
+  e.preventDefault();setAuthStatus("로그인 확인 중...");
+  const email=$("loginEmail").value.trim(),password=$("loginPassword").value;
+  const {data,error}=await sb.auth.signInWithPassword({email,password});
+  $("loginPassword").value="";
+  if(error||!data.session){setAuthStatus("이메일 또는 비밀번호가 올바르지 않습니다.",true);return}
+  setAuthStatus("로그인되었습니다.");
+  await enterAuthenticatedApp(data.session)
+};
+$("signupForm").onsubmit=async e=>{
+  e.preventDefault();
+  const email=$("signupEmail").value.trim(),p1=$("signupPassword").value,p2=$("signupPassword2").value;
+  if(p1!==p2){setAuthStatus("비밀번호 확인 값이 일치하지 않습니다.",true);return}
+  setAuthStatus("가입 요청 중...");
+  const {data,error}=await sb.auth.signUp({email,password:p1});
+  $("signupPassword").value="";$("signupPassword2").value="";
+  if(error){setAuthStatus("가입 요청을 처리하지 못했습니다. 입력값을 확인해 주세요.",true);return}
+  if(data.session){
+    setAuthStatus("계정이 만들어졌고 로그인되었습니다.");
+    await enterAuthenticatedApp(data.session)
+  }else{
+    setAuthStatus("가입 요청을 처리했습니다. 확인 메일이 왔다면 확인한 뒤 로그인해 주세요.");
+    setAuthMode("login")
+  }
+};
+$("logoutBtn").onclick=async()=>{
+  LAST_REVOKED_TOKEN=ACCESS_TOKEN;
+  try{await sb.auth.signOut({scope:"global"})}catch(e){console.error(e)}
+  showSignedOut()
+};
+$("securityCheckBtn").onclick=()=>{
+  $("sessionMetadata").textContent=maskedSessionMetadata(ACCESS_TOKEN);
+  $("securityResult").textContent="아직 요청하지 않았습니다.";
+  openModal("securityModal")
+};
+$("runLoggedInProtectedTestBtn").onclick=async()=>{
+  try{
+    const r=await t07ProtectedRequest(ACCESS_TOKEN);
+    $("securityResult").textContent="POST /functions/v1/t07-protected → HTTP "+r.status+" · "+JSON.stringify(r.data);
+  }catch(e){$("securityResult").textContent="요청 실패 · "+e.message}
+};
+$("anonProtectedTestBtn").onclick=async()=>{
+  try{
+    const r=await t07ProtectedRequest(null);
+    $("loggedOutSecurityResult").classList.remove("hide");
+    $("loggedOutSecurityResult").textContent="POST /functions/v1/t07-protected → HTTP "+r.status+" · "+JSON.stringify(r.data);
+  }catch(e){setAuthStatus("비로그인 보호 요청 확인에 실패했습니다.",true)}
+};
+$("revokedSessionTestBtn").onclick=async()=>{
+  try{
+    const r=await t07ProtectedRequest(LAST_REVOKED_TOKEN);
+    $("loggedOutSecurityResult").classList.remove("hide");
+    $("loggedOutSecurityResult").textContent="로그아웃 전과 같은 POST /functions/v1/t07-protected → HTTP "+r.status+" · "+JSON.stringify(r.data);
+  }catch(e){setAuthStatus("로그아웃 세션 재요청 확인에 실패했습니다.",true)}
+};
+$("changePasswordBtn").onclick=()=>openModal("passwordModal");
+$("passwordChangeForm").onsubmit=async e=>{
+  e.preventDefault();
+  const current=$("currentPassword").value,next=$("newPassword").value,confirmNext=$("newPassword2").value;
+  if(next!==confirmNext){toast("새 비밀번호 확인 값이 일치하지 않습니다.");return}
+  if(next.length<8){toast("새 비밀번호는 8자 이상으로 입력하세요.");return}
+  LAST_REVOKED_TOKEN=ACCESS_TOKEN;
+  const {error}=await sb.auth.updateUser({password:next,current_password:current});
+  $("currentPassword").value="";$("newPassword").value="";$("newPassword2").value="";
+  if(error){toast("비밀번호 변경에 실패했습니다.");return}
+  closeModal("passwordModal");
+  try{await sb.auth.signOut({scope:"global"})}catch{}
+  showSignedOut();
+  setAuthStatus("비밀번호를 변경했습니다. 새 비밀번호로 다시 로그인해 주세요.")
+};
+$("requestLegacyBtn").onclick=async()=>{
+  try{
+    await api("claim_requests",{method:"POST",body:"{}"});
+    toast("기존 T06 자료 연결 요청을 남겼습니다.")
+  }catch(e){
+    if(String(e.message).toLowerCase().includes("duplicate"))toast("이미 연결 요청이 있습니다.");
+    else toast("연결 요청을 확인하지 못했습니다.")
+  }
+};
+$("deleteAccountBtn").onclick=async()=>{
+  if(!confirm("계정을 삭제하면 이 계정에 연결된 T07 다이어리 자료도 함께 삭제됩니다. 계속할까요?"))return;
+  try{
+    const r=await fetch(U+"/functions/v1/t07-delete-account",{
+      method:"POST",
+      headers:{apikey:K,Authorization:"Bearer "+ACCESS_TOKEN,"Content-Type":"application/json"},
+      body:"{}"
+    });
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(d?.error||"계정 삭제에 실패했습니다.");
+    try{await sb.auth.signOut({scope:"local"})}catch{}
+    showSignedOut();
+    setAuthStatus("계정과 연결된 T07 자료를 삭제했습니다.")
+  }catch(e){toast(e.message)}
+};
+sb.auth.onAuthStateChange((event,session)=>{
+  if(session?.access_token)ACCESS_TOKEN=session.access_token;
+  if(event==="SIGNED_OUT")showSignedOut()
+});
+async function bootstrapAuth(){
+  const {data,error}=await sb.auth.getSession();
+  if(error||!data.session){showSignedOut();return}
+  await enterAuthenticatedApp(data.session)
+}
+
 
 const activeTasks=()=>S.tasks.filter(t=>!t.deleted_at);
 const planTasks=pid=>activeTasks().filter(t=>t.plan_id===pid);
@@ -3420,9 +3769,141 @@ $("toggleUpcomingBtn").onclick=()=>{$("upcomingFold").classList.toggle("open")};
 $("togglePastBtn").onclick=()=>{$("pastFold").classList.toggle("open")};
 $("newPlanBtn").onclick=()=>openPlanForm();
 
+/* T07 5-DAY EXPERIMENT */
+function fillExperimentPlanSelect(){
+  const sel=$("expPlanId");if(!sel)return;clear(sel);
+  const rows=S.plans.filter(p=>(p.progress_mode||"custom")==="time");
+  if(!rows.length){
+    const o=el("option",null,"시간 기준 목표가 없습니다.");o.value="";sel.append(o);return
+  }
+  rows.forEach(p=>{const o=el("option",null,p.title);o.value=p.id;sel.append(o)});
+  const chosen=S.experimentSetup?.plan_id||rows[0].id;sel.value=chosen;
+  const p=S.plans.find(x=>x.id===sel.value);
+  if(p&&!S.experimentSetup)$("expInitialRule").value="하루 목표 시간 "+Number(p.daily_target_minutes||0)+"분"
+}
+function renderExperiment(){
+  if(!$("experimentProgress"))return;
+  fillExperimentPlanSelect();
+  const setup=S.experimentSetup;
+  const obs=S.observations.slice().sort((a,b)=>a.day_number-b.day_number);
+  const change=S.ruleChanges[0]||null;
+  $("experimentProgress").textContent=obs.length+" / 5일";
+  $("experimentSetupFormWrap").classList.toggle("hide",!!setup);
+  $("experimentSetupSaved").classList.toggle("hide",!setup);
+
+  if(setup){
+    const plan=S.plans.find(p=>p.id===setup.plan_id);
+    $("experimentSetupSaved").textContent=
+      "질문: "+setup.question+
+      " · 지표: "+setup.metric_name+" ("+setup.unit+")"+
+      " · 계산: "+setup.calculation_rule+
+      " · 목표: "+(plan?.title||"연결 목표")+
+      " · 처음 규칙: "+setup.initial_plan_rule;
+  }
+
+  const out=$("experimentDays");clear(out);
+  if(!obs.length)out.append(el("div","empty","아직 Day 기록이 없습니다."));
+  obs.forEach(r=>{
+    const row=el("div","experimentDay");
+    const day=el("div",null);day.append(el("strong",null,"Day "+r.day_number),el("span",null,fmtDate(r.observation_date)));
+    const mid=el("div",null);mid.append(el("strong",null,num(r.metric_value)+" "+(setup?.unit||"")),el("span",null,r.note||"실행 기록에서 계산"));
+    const status=el("strong",null,"저장됨");
+    row.append(day,mid,status);out.append(row)
+  });
+
+  const showChange=!!setup&&obs.length===2&&!change;
+  $("ruleChangeBox").classList.toggle("hide",!showChange);
+  if(showChange){
+    const p=S.plans.find(x=>x.id===setup.plan_id);
+    $("expNewDailyMinutes").value=Number(p?.daily_target_minutes||0)||"";
+  }
+
+  const total=obs.reduce((n,r)=>n+Number(r.metric_value||0),0);
+  const avg=obs.length?total/obs.length:0;
+  const before=obs.filter(r=>r.day_number<=2),after=obs.filter(r=>r.day_number>=3);
+  const beforeAvg=before.length?before.reduce((n,r)=>n+Number(r.metric_value||0),0)/before.length:0;
+  const afterAvg=after.length?after.reduce((n,r)=>n+Number(r.metric_value||0),0)/after.length:0;
+  const summary=$("experimentSummary");clear(summary);
+  [["합계",num(total)+(setup?" "+setup.unit:"")],["전체 평균",obs.length?num(Math.round(avg))+(setup?" "+setup.unit:""):"-"],["변경 전 평균",before.length?num(Math.round(beforeAvg))+(setup?" "+setup.unit:""):"-"],["변경 후 평균",after.length?num(Math.round(afterAvg))+(setup?" "+setup.unit:""):"-"]].forEach(([label,value])=>{
+    const box=el("div",null);box.append(el("span",null,label),el("strong",null,value));summary.append(box)
+  });
+  if(obs.length){
+    const formula=el("div","contextBox");
+    const values=obs.map(r=>num(Number(r.metric_value||0)));
+    formula.textContent="손계산 대조 · "+values.join(" + ")+" = "+num(total)+(setup?" "+setup.unit:"")+" · "+num(total)+" ÷ "+obs.length+" = "+num(Math.round(avg))+(setup?" "+setup.unit:"");
+    summary.after(formula);
+    formula.classList.add("experimentFormula")
+  }
+  const previousFormula=summary.parentElement.querySelectorAll(".experimentFormula");
+  if(previousFormula.length>1)previousFormula[0].remove();
+
+  $("saveTodayObservationBtn").disabled=!setup||obs.length>=5;
+  $("saveTodayObservationBtn").textContent=obs.length>=5?"5일 기록 완료":"오늘 실행 기록을 Day "+(obs.length+1)+"로 저장";
+
+  if(change){
+    const note=el("div","contextBox","규칙 변경 완료 · "+change.old_rule+" → "+change.new_rule+" · "+change.reason);
+    if(!$("experimentSetupSaved").nextElementSibling?.classList?.contains("experimentRuleNote")){
+      note.classList.add("experimentRuleNote");
+      $("experimentSetupSaved").after(note)
+    }else{
+      $("experimentSetupSaved").nextElementSibling.textContent="규칙 변경 완료 · "+change.old_rule+" → "+change.new_rule+" · "+change.reason
+    }
+  }else{
+    const old=$("experimentSetupSaved").nextElementSibling;
+    if(old?.classList?.contains("experimentRuleNote"))old.remove()
+  }
+}
+$("expPlanId").addEventListener("change",()=>{
+  if(S.experimentSetup)return;
+  const p=S.plans.find(x=>x.id===$("expPlanId").value);
+  if(p)$("expInitialRule").value="하루 목표 시간 "+Number(p.daily_target_minutes||0)+"분"
+});
+$("saveExperimentSetupBtn").onclick=async()=>{
+  try{
+    const planId=$("expPlanId").value;
+    if(!planId)throw new Error("관찰할 시간 기준 목표를 먼저 만들어 주세요.");
+    const d={
+      plan_id:planId,
+      question:$("expQuestion").value.trim(),
+      metric_name:$("expMetricName").value.trim(),
+      unit:$("expUnit").value.trim(),
+      calculation_rule:$("expCalcRule").value.trim(),
+      initial_plan_rule:$("expInitialRule").value.trim(),
+      missing_rule:$("expMissingRule").value.trim(),
+      duplicate_rule:$("expDuplicateRule").value.trim(),
+      outlier_rule:$("expOutlierRule").value.trim(),
+      rounding_rule:$("expRoundingRule").value.trim(),
+      week_start:$("expWeekStart").value
+    };
+    if(Object.values(d).some(v=>String(v??"").trim()===""))throw new Error("1일차 규칙을 모두 입력해 주세요.");
+    await api("experiment_setup",{method:"POST",body:JSON.stringify(d)});
+    await load(true);toast("5일 실험 규칙을 저장했습니다.")
+  }catch(e){toast(e.message)}
+};
+$("saveTodayObservationBtn").onclick=async()=>{
+  try{
+    if(!S.experimentSetup)throw new Error("먼저 1일차 실험 규칙을 저장하세요.");
+    const obs=S.observations.slice().sort((a,b)=>a.day_number-b.day_number);
+    if(obs.length>=5)throw new Error("이미 5일 기록을 완료했습니다.");
+    if(obs.length===2&&!S.ruleChanges.length)throw new Error("Day 3 전에 계획 규칙을 먼저 변경하세요.");
+    await rpc("record_today_observation",{});
+    await load(true);toast("오늘 기록을 서버 실행 기록에서 계산해 저장했습니다.")
+  }catch(e){toast(e.message)}
+};
+$("saveRuleChangeBtn").onclick=async()=>{
+  try{
+    const minutes=Number($("expNewDailyMinutes").value||0),reason=$("expRuleReason").value.trim();
+    if(minutes<=0)throw new Error("새 하루 목표 시간을 입력하세요.");
+    if(!reason)throw new Error("규칙을 바꾸는 이유를 입력하세요.");
+    await rpc("apply_rule_change",{p_new_daily_minutes:minutes,p_reason:reason});
+    $("expRuleReason").value="";
+    await load(true);toast("Day 2 뒤 규칙 변경을 저장했습니다.")
+  }catch(e){toast(e.message)}
+};
+
 /* EXPORT */
 $("exportBtn").onclick=()=>{
-  const data={exported_at:new Date().toISOString(),timezone:"Asia/Seoul",plans:S.plans,plan_history:S.history,plan_progress_items:S.progress,tasks:S.tasks,execution_records:S.execs,completion_events:S.events,task_reflections:S.taskRefs,reflections:S.refs,important_dates:S.importantDates,daily_goal_records:S.dailyRecords};
+  const data={exported_at:new Date().toISOString(),timezone:"Asia/Seoul",plans:S.plans,plan_history:S.history,plan_progress_items:S.progress,tasks:S.tasks,execution_records:S.execs,completion_events:S.events,task_reflections:S.taskRefs,reflections:S.refs,important_dates:S.importantDates,daily_goal_records:S.dailyRecords,t07_experiment_setup:S.experimentSetup?[S.experimentSetup]:[],t07_daily_observations:S.observations,t07_rule_changes:S.ruleChanges};
   const u=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"})),a=document.createElement("a");a.href=u;a.download="pds-diary-export.json";a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)
 };
 
@@ -3436,7 +3917,7 @@ function refreshOpenViews(){
   if($("planDetailModal").classList.contains("open"))drawPlanDetail();
   if($("calendarModal").classList.contains("open"))drawCalendar()
 }
-function drawAll(){$("todayLabel").textContent=new Date().toLocaleDateString("ko-KR",{year:"numeric",month:"long",day:"numeric",weekday:"long"});drawMainJournal()}
+function drawAll(){$("todayLabel").textContent=new Date().toLocaleDateString("ko-KR",{year:"numeric",month:"long",day:"numeric",weekday:"long"});drawMainJournal();renderExperiment()}
 window.addEventListener("storage",e=>{if(e.key&&e.key.startsWith(TIMER_PREFIX)){drawRunningTimerBanner();refreshOpenViews()}});
 setInterval(()=>{if(runningTimer())drawRunningTimerBanner()},30000);
 
@@ -3478,6 +3959,15 @@ async function load(skipAutoComplete=false){
     api("important_dates?select=*&order=date.asc,created_at.asc"),
     api("daily_goal_records?select=*&order=record_date.asc,created_at.asc")
   ]);
+  const [setupRows,observations,ruleChanges]=await Promise.all([
+    api("experiment_setup?select=*&limit=1"),
+    api("daily_observations?select=*&order=day_number.asc"),
+    api("rule_changes?select=*&order=changed_at.asc")
+  ]);
+  S.experimentSetup=setupRows?.[0]||null;
+  S.observations=observations||[];
+  S.ruleChanges=ruleChanges||[];
+  $("requestLegacyBtn").classList.toggle("hide",S.plans.length>0);
   if(!skipAutoComplete){
     const changed=await autoCompleteEligiblePlans();
     if(changed)return load(true)
@@ -3488,7 +3978,7 @@ async function load(skipAutoComplete=false){
   if(!S.planDate)S.planDate=today();
   drawAll();drawRunningTimerBanner()
 }
-(async()=>{try{await load()}catch(e){console.error(e);toast("DB를 불러오지 못했습니다.")}})();
+bootstrapAuth().catch(e=>{console.error(e);showSignedOut()});
 </script>
 </body>
 </html>
