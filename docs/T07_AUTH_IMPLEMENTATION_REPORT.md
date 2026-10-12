@@ -1,0 +1,122 @@
+# T07 인증 구현 설명서
+
+> 기준 T06: `dfdfewqk/Horse-Journey-Diary-ALEPH`  
+> 고정 commit: `6949cabd358e0290332172c7be9604200ac7fcb7`  
+> T07 repository: `dfdfewqk/ALEPH-7-`
+
+## ① 무엇으로 붙였나
+
+- 인증 서비스: **Supabase Auth**
+- 로그인 방식: **Email + Password**
+- 브라우저 클라이언트: **@supabase/supabase-js 2.117.3**
+- 데이터 권한: **PostgreSQL Row Level Security(RLS)**
+- 비밀번호 저장: **Supabase Auth의 bcrypt + 계정별 무작위 salt** (해시는 `auth.users.encrypted_password`에 저장)
+- 사용자 식별: Supabase Auth access token의 JWT `sub` / `session_id`
+- 로그아웃 세션 추가 검증: private 스키마의 `private.t07_is_active_session()`이 `auth.sessions`에 현재 `session_id`가 실제로 존재하는지 확인하고, 공개 API에는 security-invoker 래퍼 `t07_session_status()`만 노출
+
+브라우저에는 Supabase publishable key만 두며 service role key, DB password, JWT signing secret은 두지 않는다.
+
+## ② 왜 그걸 골랐나
+
+기존 T06이 이미 Supabase PostgreSQL을 사용하고 있어 Supabase Auth의 사용자 ID와 PostgreSQL RLS를 직접 연결할 수 있다는 점을 우선했다. 비밀번호 저장과 검증을 직접 구현하지 않고 인증 서비스에 맡겨 직접 구현에서 생길 수 있는 보안 오류를 줄였다. Supabase Auth는 비밀번호 원문이 아니라 bcrypt 해시와 무작위 salt를 저장한다.
+
+함께 검토한 방법은 직접 세션 서버와 비밀번호 해시를 구현하는 방식이다. 이 방식은 비밀번호 저장, 세션 발급·폐기, 쿠키/토큰 보안까지 직접 책임져야 하므로 이번 과제에서는 기존 Supabase 구조와 바로 연결되는 Supabase Auth를 선택했다.
+
+## ③ 어디를 어떻게 고쳤나
+
+### GitHub `index.html`
+
+- 로그인/회원가입 첫 화면 추가
+- 로그인 전에는 다이어리 `load()`를 실행하지 않음
+- `signUp()`, `signInWithPassword()`, `signOut()` 연결
+- 모든 T07 데이터 요청에 로그인 access token 사용
+- 기존 T06 REST 경로를 T07 보호 테이블(`t07_*`)로 라우팅
+- 로그아웃 시 화면 상태와 메모리의 다이어리 데이터를 비움
+- 기존 T06 자료 연결 요청 버튼 추가
+- 내 데이터 내보내기에 T07 5일 실험 데이터 추가
+- 계정 삭제 버튼 추가
+- T07 5일 사용 기록 UI 추가
+- `t07_record_today_observation()`으로 5일 지표를 실제 실행 기록에서 서버 계산
+
+### Supabase migrations
+
+적용한 migration:
+
+1. `t07_parallel_private_store`
+   - T06 테이블을 건드리지 않고 T07 전용 `t07_*` 테이블을 별도로 생성
+   - 기존 T06 row ID를 유지한 복사본 생성
+   - `user_id` 추가
+   - anon 권한 제거
+   - authenticated + owner 조건의 RLS 적용
+   - `t07_is_active_session()` 추가
+
+2. `t07_secure_functions_and_experiment`
+   - owner 강제 trigger
+   - T07용 완료/완료취소 RPC
+   - 하루 목표 동기화 RPC/trigger
+   - 5일 실험용 setup / observation / rule change 테이블
+
+3. `t07_experiment_plan_link`
+   - 5일 실험과 실제 목표를 연결
+
+4. `t07_experiment_order_guards`
+   - Asia/Seoul 기준 같은 날짜 중복 기록 방지
+   - Day 순서 강제
+   - Day 2 뒤 규칙 변경 없이 Day 3 저장 불가
+   - Day 1 이후 실험 기준 변경 제한
+
+5. `t07_atomic_rule_change`
+   - 목표의 하루 시간 변경과 규칙 변경 기록을 한 transaction 안에서 처리
+
+6. `t07_server_derived_daily_observation`
+   - Day 값은 브라우저가 보내는 숫자를 저장하지 않고 서버가 선택한 목표의 `execution_records.actual_minutes`를 합산
+   - 같은 날짜 중복, Day 순서, Day 3 전 규칙 변경 조건을 서버에서 검증
+
+7. `t07_lock_internal_helpers`
+   - trigger 전용 함수의 직접 EXECUTE 권한 제거
+
+8. `t07_move_active_session_check_private`
+   - 활성 session 검사 함수를 private schema로 이동
+   - RLS와 보호 RPC가 private 함수를 사용하도록 변경
+
+### Edge Functions
+
+- `supabase/functions/t07-protected/index.ts`
+  - 로그인/활성 세션 확인
+  - 요청 body/header의 다른 user_id를 신뢰하지 않음
+  - 실제 소유자는 인증된 사용자에서 결정
+  - 남의 단일 자료에는 404 반환
+  - 목록은 로그인 사용자의 자료만 반환
+
+- `supabase/functions/t07-delete-account/index.ts`
+  - 현재 로그인 사용자만 삭제
+  - service role key는 Edge Function 환경에서만 사용
+  - T07 자료는 auth.users FK의 ON DELETE CASCADE로 함께 삭제
+
+## ④ 안 열리는 것을 확인한 기록
+
+이 항목은 실제 계정 두 개와 실제 HTTP 요청/응답을 사용해 채운다. 현재 구현은 완료했지만 아래 증거는 사용자 로그인 후 직접 실행해 기록한다.
+
+- [대기] 로그인 상태 동일 요청 성공 / 로그아웃 후 같은 요청 거절
+- [대기] A → B READ / UPDATE / DELETE
+- [대기] B → A READ / UPDATE / DELETE
+- [대기] URL / Header / Body에 다른 user_id를 넣어도 내 목록만 반환
+- [대기] 로그인 없이 직접 보호 API 호출 → 401
+- [대기] A 목록에 B 자료 0건 / B 목록에 A 자료 0건
+- [대기] 공격 전후 상대 계정 자료 건수 동일
+
+요청/응답을 제출문에 옮길 때 password는 `[REDACTED]`, access token은 `eyJ...생략` 형태로 가린다.
+
+## ⑤ AI와 나
+
+- AI에게 맡긴 일: T06 구조를 복사한 뒤 Supabase Auth, T07 전용 RLS, 세션 검증 함수, 보호 API, 5일 기록 DB 구조와 화면을 구현하고 코드 정합성을 점검하게 했다.
+- 내가 직접 판단한 일: 기존 T06 결과물을 깨지 않도록 별도의 ALEPH-7 저장소를 만들고, T07은 T06 기능을 유지한 채 인증을 추가하는 방향으로 정했다.
+- AI 제안을 따르지 않은 일: 실제 5일 사용 기록을 과거 T06 기록으로 대신하지 않고, 인증이 적용된 T07에서 새로 남겨야 한다는 과제 조건을 유지한다.
+
+## ⑥ 아직 못 막은 것
+
+- **무차별 로그인 시도 전용 rate limiting UI/정책을 별도로 구현하지 않았다.** 반복적인 비밀번호 추측 시도를 더 적극적으로 제한하지 못한다는 위험이 있다.
+- **MFA(두 번째 인증 수단)를 구현하지 않았다.** 비밀번호가 노출되면 추가 인증 단계가 없다.
+- **비밀번호 재설정 전용 사용자 화면을 아직 구현하지 않았다.** 비밀번호를 잊은 사용자의 복구 흐름이 완전하지 않다.
+- **보안 이벤트 전용 감사 로그 화면을 구현하지 않았다.** 누가 언제 실패한 접근을 시도했는지를 앱 안에서 장기 추적하기 어렵다.
+- **Supabase의 leaked-password protection은 현재 프로젝트에서 꺼져 있다.** 2026-10-12 보안 Advisor 재검사에서 남은 유일한 경고이며, 이미 유출된 비밀번호를 추가로 차단하는 보호가 적용되지 않은 상태다.
