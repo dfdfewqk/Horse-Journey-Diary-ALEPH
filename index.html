@@ -1765,6 +1765,9 @@ input:focus,select:focus,textarea:focus{
       <label>이메일<input id="loginEmail" type="email" autocomplete="username" required></label>
       <label>비밀번호<input id="loginPassword" type="password" autocomplete="current-password" required></label>
       <button class="btn primary" type="submit">로그인</button>
+      <div class="actions" style="margin-top:8px;gap:8px">
+        <button id="resendConfirmationBtn" class="btn ghost" type="button">인증 메일 다시 보내기</button>
+      </div>
     </form>
     <form id="signupForm" class="authForm hide">
       <label>이메일<input id="signupEmail" type="email" autocomplete="username" required></label>
@@ -2428,6 +2431,24 @@ function setAuthMode(mode){
   $("showSignupBtn").classList.toggle("active",!login);
   setAuthStatus(login?"로그인하면 내 다이어리만 불러옵니다.":"새 계정을 만든 뒤 로그인해 주세요.")
 }
+function loginErrorMessage(error){
+  const code=String(error?.code||"").toLowerCase();
+  const message=String(error?.message||"").toLowerCase();
+  if(code==="email_not_confirmed"||message.includes("email not confirmed")){
+    return "비밀번호 문제가 아니라 이메일 인증이 완료되지 않았습니다. 가입할 때 사용한 이메일의 받은편지함·스팸함에서 인증 링크를 누르세요. 메일이 없으면 아래 '인증 메일 다시 보내기'를 누르세요.";
+  }
+  if(code==="invalid_credentials"||message.includes("invalid login credentials")){
+    return "로그인을 확인하지 못했습니다. 이메일 주소와 비밀번호를 확인하세요. 방금 회원가입했다면 이메일 인증 메일도 확인해 주세요.";
+  }
+  if(code==="too_many_requests"||error?.status===429||message.includes("rate limit")){
+    return "로그인 시도 횟수가 많습니다. 잠시 기다린 뒤 다시 시도해 주세요.";
+  }
+  if(code==="email_address_invalid"||code==="validation_failed"){
+    return "이메일 주소를 다시 확인해 주세요.";
+  }
+  const safeCode=String(error?.code||error?.status||"").replace(/[^a-zA-Z0-9_-]/g,"").slice(0,40);
+  return "인증 요청을 처리하지 못했습니다."+ (safeCode?" 오류 코드: "+safeCode:"")+" 잠시 후 다시 시도해 주세요.";
+}
 async function enterAuthenticatedApp(session){
   if(!session?.access_token)return showSignedOut();
   ACCESS_TOKEN=session.access_token;
@@ -2458,29 +2479,83 @@ function showSignedOut(){
 $("showLoginBtn").onclick=()=>setAuthMode("login");
 $("showSignupBtn").onclick=()=>setAuthMode("signup");
 $("loginForm").onsubmit=async e=>{
-  e.preventDefault();setAuthStatus("로그인 확인 중...");
+  e.preventDefault();
+  const button=$("loginForm").querySelector('button[type="submit"]');
   const email=$("loginEmail").value.trim(),password=$("loginPassword").value;
-  const {data,error}=await sb.auth.signInWithPassword({email,password});
-  $("loginPassword").value="";
-  if(error||!data.session){setAuthStatus("이메일 또는 비밀번호가 올바르지 않습니다.",true);return}
-  setAuthStatus("로그인되었습니다.");
-  await enterAuthenticatedApp(data.session)
+  if(button.disabled)return;
+  button.disabled=true;setAuthStatus("로그인 확인 중...");
+  try{
+    const {data,error}=await sb.auth.signInWithPassword({email,password});
+    if(error){setAuthStatus(loginErrorMessage(error),true);return}
+    if(!data?.session){setAuthStatus("로그인 세션을 받지 못했습니다. 이메일 인증 상태를 확인해 주세요.",true);return}
+    setAuthStatus("로그인되었습니다.");
+    await enterAuthenticatedApp(data.session);
+  }catch(e){
+    console.error("Authentication request failed",e?.code||e?.name||"network");
+    setAuthStatus("인증 서버에 연결하지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.",true);
+  }finally{
+    $("loginPassword").value="";
+    button.disabled=false;
+  }
 };
 $("signupForm").onsubmit=async e=>{
   e.preventDefault();
+  const button=$("signupForm").querySelector('button[type="submit"]');
   const email=$("signupEmail").value.trim(),p1=$("signupPassword").value,p2=$("signupPassword2").value;
   if(p1!==p2){setAuthStatus("비밀번호 확인 값이 일치하지 않습니다.",true);return}
-  setAuthStatus("가입 요청 중...");
-  const {data,error}=await sb.auth.signUp({email,password:p1});
-  $("signupPassword").value="";$("signupPassword2").value="";
-  if(error){setAuthStatus("가입 요청을 처리하지 못했습니다. 입력값을 확인해 주세요.",true);return}
-  if(data.session){
-    setAuthStatus("계정이 만들어졌고 로그인되었습니다.");
-    await enterAuthenticatedApp(data.session)
-  }else{
-    setAuthStatus("가입 요청을 처리했습니다. 확인 메일이 왔다면 확인한 뒤 로그인해 주세요.");
-    setAuthMode("login")
+  if(button.disabled)return;
+  button.disabled=true;setAuthStatus("가입 요청 중...");
+  try{
+    const {data,error}=await sb.auth.signUp({email,password:p1,options:{emailRedirectTo:window.location.origin+window.location.pathname}});
+    if(error){
+      const code=String(error.code||"");
+      if(code==="user_already_exists"||code==="email_exists"){
+        setAuthStatus("이 이메일로 가입 요청한 이력이 있습니다. 로그인 또는 이메일 인증을 먼저 확인해 주세요.",true);
+      }else{
+        setAuthStatus(loginErrorMessage(error),true);
+      }
+      return;
+    }
+    if(data?.session){
+      setAuthStatus("계정이 만들어졌고 로그인되었습니다.");
+      await enterAuthenticatedApp(data.session);
+    }else{
+      $("loginEmail").value=email;
+      setAuthMode("login");
+      setAuthStatus("가입 요청이 저장됐습니다. 이메일 인증이 필요한 상태입니다. 메일함과 스팸함의 인증 링크를 누른 뒤 로그인하세요. 메일이 없다면 '인증 메일 다시 보내기'를 누르세요.");
+    }
+  }catch(err){
+    console.error("Sign up request failed",err?.code||err?.name||"network");
+    setAuthStatus("가입 서버 연결에 실패했습니다. 잠시 후 다시 시도해 주세요.",true);
+  }finally{
+    $("signupPassword").value="";$("signupPassword2").value="";
+    button.disabled=false;
   }
+};
+$("resendConfirmationBtn").onclick=async()=>{
+  const button=$("resendConfirmationBtn");
+  const email=$("loginEmail").value.trim()||$("signupEmail").value.trim();
+  if(!email||!$("loginEmail").checkValidity()){
+    setAuthStatus("먼저 로그인 이메일 칸에 회원가입할 때 사용한 이메일 주소를 입력해 주세요.",true);return;
+  }
+  if(button.disabled)return;
+  button.disabled=true;setAuthStatus("인증 메일 재전송을 요청하는 중...");
+  try{
+    const {error}=await sb.auth.resend({type:"signup",email,options:{emailRedirectTo:window.location.origin+window.location.pathname}});
+    if(error){
+      const code=String(error.code||"").toLowerCase();
+      if(error.status===429||code.includes("rate_limit")){
+        setAuthStatus("메일 재전송 제한에 걸렸습니다. 잠시 기다렸다가 다시 시도해 주세요.",true);
+      }else{
+        setAuthStatus("메일을 재전송하지 못했습니다. 이메일 주소와 인증 메일 발송 설정을 확인해 주세요. 오류 코드: "+String(error.code||error.status||"unknown").slice(0,50),true);
+      }
+      return;
+    }
+    setAuthStatus("인증 메일 재전송을 요청했습니다. 받은편지함과 스팸함을 확인하고 링크를 누른 뒤 로그인해 주세요. 메일 발송 상태에 따라 도착까지 시간이 걸릴 수 있습니다.");
+  }catch(err){
+    console.error("Resend confirmation request failed",err?.code||err?.name||"network");
+    setAuthStatus("인증 메일 재전송 중 네트워크 오류가 발생했습니다.",true);
+  }finally{button.disabled=false}
 };
 $("logoutBtn").onclick=async()=>{
   LAST_REVOKED_TOKEN=ACCESS_TOKEN;
