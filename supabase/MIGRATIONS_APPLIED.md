@@ -50,3 +50,10 @@
 - `t07_retro_experiment_days` 테이블 5건, 원본 활동 근거 FK, 실제 활동 날짜와 10/19 사후 등록 시각 별도 저장, 소유권 RLS.
 - 인증된 사용자에게만 허용되는 `t07_register_verified_retro_experiment()`는 서버 완료 이벤트를 검증하여 재실행해도 5건만 유지.
 - SQL: `supabase/migrations/20261019_t07_register_verified_retro_experiment.sql`.
+
+## 2026-10-19 실제 공부 할 일 60분→120분 변경 근거
+
+- production migration: `t07_verified_60_to_120_task_duration_change_between_actual_days_2_and_3`.
+- Table: `t07_retro_rule_evidence`; 실제 Day2 완료와 Day3 120분 예정 할 일의 생성·완료 순서를 검사한 사후 근거 1건.
+- 변경 사실 관찰: 10/17 16:43:29 KST, 사후 등록: 10/19 10:54:44 KST. 원본 Task/Plan 보존.
+- SQL: `supabase/migrations/20261019_t07_retro_task_duration_change.sql`.
