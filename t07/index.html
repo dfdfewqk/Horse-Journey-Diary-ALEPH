@@ -1916,6 +1916,7 @@ input:focus,select:focus,textarea:focus{
 
     <div class="actions"><button id="registerRetrospectiveBtn" class="btn ghost hide" type="button">실제 사용 5일을 실험으로 사후 등록</button></div>
     <div id="experimentDays" class="experimentDays"></div>
+    <div id="experimentRuleEvidence" class="contextBox hide" style="margin-top:12px"></div>
     <div id="experimentRetrospective" class="contextBox" style="margin-top:12px"></div>
 
     <div id="ruleChangeBox" class="ruleChangeBox hide">
@@ -2331,7 +2332,7 @@ input:focus,select:focus,textarea:focus{
 <script>
 const S={
   plans:[],history:[],tasks:[],execs:[],refs:[],taskRefs:[],events:[],progress:[],importantDates:[],dailyRecords:[],
-  experimentSetup:null,observations:[],ruleChanges:[],retrospectiveDays:[],retroExperimentDays:[],
+  experimentSetup:null,observations:[],ruleChanges:[],retrospectiveDays:[],retroExperimentDays:[],retroRuleEvidence:null,
   plan:null,mainDate:null,planDate:null,calendarMonth:null,
   editingPlan:null,editingTask:null,finishingTask:null,editingImportantDate:null
 };
@@ -2361,7 +2362,7 @@ const TABLE_MAP={
   important_dates:"t07_important_dates",daily_goal_records:"t07_daily_goal_records",
   claim_requests:"t07_claim_requests",experiment_setup:"t07_experiment_setup",
   daily_observations:"t07_daily_observations",rule_changes:"t07_rule_changes",
-  retrospective_activity_days:"t07_retrospective_activity_days",retro_experiment_days:"t07_retro_experiment_days"
+  retrospective_activity_days:"t07_retrospective_activity_days",retro_experiment_days:"t07_retro_experiment_days",retro_rule_evidence:"t07_retro_rule_evidence"
 };
 const RPC_MAP={
   complete_task:"t07_complete_task",
@@ -2444,7 +2445,7 @@ async function enterAuthenticatedApp(session){
   }
 }
 function clearDiaryState(){
-  S.plans=[];S.history=[];S.tasks=[];S.execs=[];S.refs=[];S.taskRefs=[];S.events=[];S.progress=[];S.importantDates=[];S.dailyRecords=[];S.experimentSetup=null;S.observations=[];S.ruleChanges=[];S.retrospectiveDays=[];S.retroExperimentDays=[];
+  S.plans=[];S.history=[];S.tasks=[];S.execs=[];S.refs=[];S.taskRefs=[];S.events=[];S.progress=[];S.importantDates=[];S.dailyRecords=[];S.experimentSetup=null;S.observations=[];S.ruleChanges=[];S.retrospectiveDays=[];S.retroExperimentDays=[];S.retroRuleEvidence=null;
   S.plan=null
 }
 function showSignedOut(){
@@ -3847,6 +3848,7 @@ function renderExperiment(){
   const retrospective=S.retrospectiveDays||[];
   const retroDays=(S.retroExperimentDays||[]).slice().sort((a,b)=>a.day_number-b.day_number);
   const retroDone=retroDays.length===5;
+  const retroRule=S.retroRuleEvidence;
   $("experimentProgress").textContent=retroDone?"5/5일 완료 · 사후 등록":
     (retrospective.length?"실제 사용 "+retrospective.length+" / 5일":obs.length+" / 5일");
   const importButton=$("registerRetrospectiveBtn");
@@ -3906,6 +3908,16 @@ function renderExperiment(){
     });
   }
 
+  const ruleEvidenceBox=$("experimentRuleEvidence");clear(ruleEvidenceBox);
+  ruleEvidenceBox.classList.toggle("hide",!retroDone||!retroRule);
+  if(retroDone&&retroRule){
+    const observed=new Date(retroRule.first_observed_new_plan_at).toLocaleString("ko-KR",{timeZone:"Asia/Seoul"});
+    ruleEvidenceBox.append(el("div","journalTitle","Day 2 이후 공부 계획 시간 변경 · 사후 검증"));
+    ruleEvidenceBox.append(el("div",null,"Day 2 할 일 예정 "+num(retroRule.previous_task_planned_minutes)+"분 → Day 3 할 일 예정 "+num(retroRule.new_task_planned_minutes)+"분"));
+    ruleEvidenceBox.append(el("div","muted","새 120분 할 일 등록: "+observed+" · Day 3 공부 수행 전에 변경된 계획 시간 확인"));
+    ruleEvidenceBox.append(el("div","muted","상위 목표의 하루 60분 설정값은 그대로이며, 할 일의 예정 시간이 바뀐 사실을 별도로 기록했습니다. 변경 사실은 사후 확인 등록했습니다."));
+  }
+
   const showChange=!!setup&&!retroDone&&obs.length===2&&!change;
   $("ruleChangeBox").classList.toggle("hide",!showChange);
   if(showChange){
@@ -3916,12 +3928,14 @@ function renderExperiment(){
   const metrics=retroDone?retroDays.map(r=>Number(r.metric_value_minutes||0)):obs.map(r=>Number(r.metric_value||0));
   const total=metrics.reduce((sum,n)=>sum+n,0);
   const avg=metrics.length?total/metrics.length:0;
-  const before=obs.filter(r=>r.day_number<=2),after=obs.filter(r=>r.day_number>=3);
-  const beforeAvg=before.length?before.reduce((n,r)=>n+Number(r.metric_value||0),0)/before.length:0;
-  const afterAvg=after.length?after.reduce((n,r)=>n+Number(r.metric_value||0),0)/after.length:0;
+  const before=retroDone?retroDays.filter(r=>r.day_number<=2):obs.filter(r=>r.day_number<=2);
+  const after=retroDone?retroDays.filter(r=>r.day_number>=3):obs.filter(r=>r.day_number>=3);
+  const measure=r=>Number(retroDone?r.metric_value_minutes||0:r.metric_value||0);
+  const beforeAvg=before.length?before.reduce((n,r)=>n+measure(r),0)/before.length:0;
+  const afterAvg=after.length?after.reduce((n,r)=>n+measure(r),0)/after.length:0;
   const summary=$("experimentSummary");clear(summary);
   (retroDone
-    ?[["5일 합계",num(total)+"분"],["하루 평균",num(Math.round(avg))+"분 (계산값 "+num(avg)+"분)"],["시간 미측정",retroDays.filter(r=>r.metric_missing).length+"일 · 0분 반영"],["변경 전후 비교","불가 · 별도 30문제 목표는 Day 5"]]
+    ?[["5일 합계",num(total)+"분"],["하루 평균",num(Math.round(avg))+"분 (계산값 "+num(avg)+"분)"],["변경 전 평균",retroRule?num(beforeAvg)+"분 (Day 1~2)":"확인 자료 없음"],["변경 후 평균",retroRule?num(afterAvg)+"분 (Day 3~5, 5일차 미측정 0분)":"확인 자료 없음"]]
     :[["합계",num(total)+(setup?" "+setup.unit:"")],["전체 평균",obs.length?num(Math.round(avg))+(setup?" "+setup.unit:""):"-"],["변경 전 평균",before.length?num(Math.round(beforeAvg))+(setup?" "+setup.unit:""):"-"],["변경 후 평균",after.length?num(Math.round(afterAvg))+(setup?" "+setup.unit:""):"-"]]).forEach(([label,value])=>{
     const box=el("div",null);box.append(el("span",null,label),el("strong",null,value));summary.append(box)
   });
@@ -4008,7 +4022,7 @@ $("saveRuleChangeBtn").onclick=async()=>{
 
 /* EXPORT */
 $("exportBtn").onclick=()=>{
-  const data={exported_at:new Date().toISOString(),timezone:"Asia/Seoul",plans:S.plans,plan_history:S.history,plan_progress_items:S.progress,tasks:S.tasks,execution_records:S.execs,completion_events:S.events,task_reflections:S.taskRefs,reflections:S.refs,important_dates:S.importantDates,daily_goal_records:S.dailyRecords,t07_experiment_setup:S.experimentSetup?[S.experimentSetup]:[],t07_daily_observations:S.observations,t07_rule_changes:S.ruleChanges,t07_retrospective_activity_days:S.retrospectiveDays,t07_retro_experiment_days:S.retroExperimentDays,retrospective_note:"사후 확인 활동 기록은 Day 버튼 저장과 구별됩니다."};
+  const data={exported_at:new Date().toISOString(),timezone:"Asia/Seoul",plans:S.plans,plan_history:S.history,plan_progress_items:S.progress,tasks:S.tasks,execution_records:S.execs,completion_events:S.events,task_reflections:S.taskRefs,reflections:S.refs,important_dates:S.importantDates,daily_goal_records:S.dailyRecords,t07_experiment_setup:S.experimentSetup?[S.experimentSetup]:[],t07_daily_observations:S.observations,t07_rule_changes:S.ruleChanges,t07_retrospective_activity_days:S.retrospectiveDays,t07_retro_experiment_days:S.retroExperimentDays,t07_retro_rule_evidence:S.retroRuleEvidence?[S.retroRuleEvidence]:[],retrospective_note:"사후 확인 활동 기록은 Day 버튼 저장과 구별됩니다."};
   const u=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"})),a=document.createElement("a");a.href=u;a.download="pds-diary-export.json";a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)
 };
 
@@ -4064,18 +4078,20 @@ async function load(skipAutoComplete=false){
     api("important_dates?select=*&order=date.asc,created_at.asc"),
     api("daily_goal_records?select=*&order=record_date.asc,created_at.asc")
   ]);
-  const [setupRows,observations,ruleChanges,retrospectiveDays,retroExperimentDays]=await Promise.all([
+  const [setupRows,observations,ruleChanges,retrospectiveDays,retroExperimentDays,retroRuleRows]=await Promise.all([
     api("experiment_setup?select=*&limit=1"),
     api("daily_observations?select=*&order=day_number.asc"),
     api("rule_changes?select=*&order=changed_at.asc"),
     api("retrospective_activity_days?select=activity_date,study_minutes,completed_task_count,other_metric_value,other_metric_unit,registered_at&order=activity_date.asc"),
-    api("retro_experiment_days?select=day_number,activity_date,metric_value_minutes,metric_missing,other_metric_value,other_metric_unit,completed_task_count,registered_at&order=day_number.asc")
+    api("retro_experiment_days?select=day_number,activity_date,metric_value_minutes,metric_missing,other_metric_value,other_metric_unit,completed_task_count,registered_at&order=day_number.asc"),
+    api("retro_rule_evidence?select=previous_task_planned_minutes,new_task_planned_minutes,first_observed_new_plan_at,registered_at,scope_note,reason&limit=1")
   ]);
   S.experimentSetup=setupRows?.[0]||null;
   S.observations=observations||[];
   S.ruleChanges=ruleChanges||[];
   S.retrospectiveDays=retrospectiveDays||[];
   S.retroExperimentDays=retroExperimentDays||[];
+  S.retroRuleEvidence=retroRuleRows?.[0]||null;
   // 이미 새 목표를 작성한 경우에도 기존 T06 자료 연결 요청을 표시한다.
   $("requestLegacyBtn").classList.remove("hide");
   {
