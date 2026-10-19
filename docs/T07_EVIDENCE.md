@@ -209,6 +209,8 @@
 - 공식 Day 1~5 관찰 기록 및 Day 2–Day 3 사이 규칙 변경 타임스탬프는 없음.
 - 테스트 계정 B의 활성 인증 세션과 A↔B 양방향 실제 HTTP 요청/응답 로그까지 재현하지 않았으므로 해당 항목은 미검증.
 
+- **2026-10-19 추가 UI 검사:** 날짜 선택 후 계획이 복수일 때 호출되는 `openPlanPickerForDate`의 `planPickerModal`, `planPickerDate`, `planPickerList`가 누락된 것을 발견해 모달을 복원했다. 원본 목표·할 일·계산 기능은 유지했다.
+
 ## 자동 사전 점검
 
 - T06 고정 commit ancestry: **PASS**
