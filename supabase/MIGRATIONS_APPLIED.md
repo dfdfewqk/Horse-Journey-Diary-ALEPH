@@ -43,3 +43,10 @@
 - SQL: `supabase/migrations/20261019_t07_safe_cascade_daily_goal.sql`.
 - 자신의 계획 삭제 시 기존 집계 trigger의 `PLAN_NOT_FOUND` 오류를 수정함.
 - 사용자 역할로 DELETE 테스트 1건 동작 확인, 실제 변화는 트랜잭션에서 되돌려 기존 기록 보존.
+
+## 2026-10-19 실제 5일 실험 사후 등록
+
+- `t07_audited_five_day_experiment_retro_registration` migration 적용.
+- `t07_retro_experiment_days` 테이블 5건, 원본 활동 근거 FK, 실제 활동 날짜와 10/19 사후 등록 시각 별도 저장, 소유권 RLS.
+- 인증된 사용자에게만 허용되는 `t07_register_verified_retro_experiment()`는 서버 완료 이벤트를 검증하여 재실행해도 5건만 유지.
+- SQL: `supabase/migrations/20261019_t07_register_verified_retro_experiment.sql`.

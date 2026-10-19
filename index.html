@@ -1914,6 +1914,7 @@ input:focus,select:focus,textarea:focus{
       <button id="saveTodayObservationBtn" class="btn primary" type="button">오늘 실행 기록을 Day로 저장</button>
     </div>
 
+    <div class="actions"><button id="registerRetrospectiveBtn" class="btn ghost hide" type="button">실제 사용 5일을 실험으로 사후 등록</button></div>
     <div id="experimentDays" class="experimentDays"></div>
     <div id="experimentRetrospective" class="contextBox" style="margin-top:12px"></div>
 
@@ -2330,7 +2331,7 @@ input:focus,select:focus,textarea:focus{
 <script>
 const S={
   plans:[],history:[],tasks:[],execs:[],refs:[],taskRefs:[],events:[],progress:[],importantDates:[],dailyRecords:[],
-  experimentSetup:null,observations:[],ruleChanges:[],retrospectiveDays:[],
+  experimentSetup:null,observations:[],ruleChanges:[],retrospectiveDays:[],retroExperimentDays:[],
   plan:null,mainDate:null,planDate:null,calendarMonth:null,
   editingPlan:null,editingTask:null,finishingTask:null,editingImportantDate:null
 };
@@ -2360,14 +2361,14 @@ const TABLE_MAP={
   important_dates:"t07_important_dates",daily_goal_records:"t07_daily_goal_records",
   claim_requests:"t07_claim_requests",experiment_setup:"t07_experiment_setup",
   daily_observations:"t07_daily_observations",rule_changes:"t07_rule_changes",
-  retrospective_activity_days:"t07_retrospective_activity_days"
+  retrospective_activity_days:"t07_retrospective_activity_days",retro_experiment_days:"t07_retro_experiment_days"
 };
 const RPC_MAP={
   complete_task:"t07_complete_task",
   cancel_task_completion:"t07_cancel_task_completion",
   sync_daily_goal_record:"t07_sync_daily_goal_record",
   apply_rule_change:"t07_apply_rule_change",
-  record_today_observation:"t07_record_today_observation"
+  record_today_observation:"t07_record_today_observation",register_verified_retro_experiment:"t07_register_verified_retro_experiment"
 };
 function mapPath(path){
   const i=path.indexOf("?");
@@ -2443,7 +2444,7 @@ async function enterAuthenticatedApp(session){
   }
 }
 function clearDiaryState(){
-  S.plans=[];S.history=[];S.tasks=[];S.execs=[];S.refs=[];S.taskRefs=[];S.events=[];S.progress=[];S.importantDates=[];S.dailyRecords=[];S.experimentSetup=null;S.observations=[];S.ruleChanges=[];S.retrospectiveDays=[];
+  S.plans=[];S.history=[];S.tasks=[];S.execs=[];S.refs=[];S.taskRefs=[];S.events=[];S.progress=[];S.importantDates=[];S.dailyRecords=[];S.experimentSetup=null;S.observations=[];S.ruleChanges=[];S.retrospectiveDays=[];S.retroExperimentDays=[];
   S.plan=null
 }
 function showSignedOut(){
@@ -3844,10 +3845,14 @@ function renderExperiment(){
   const obs=S.observations.slice().sort((a,b)=>a.day_number-b.day_number);
   const change=S.ruleChanges[0]||null;
   const retrospective=S.retrospectiveDays||[];
-  $("experimentProgress").textContent=retrospective.length
-    ?"실제 활동 "+retrospective.length+" / 5일 · Day 별도 "+obs.length+" / 5일"
-    :obs.length+" / 5일";
+  const retroDays=(S.retroExperimentDays||[]).slice().sort((a,b)=>a.day_number-b.day_number);
+  const retroDone=retroDays.length===5;
+  $("experimentProgress").textContent=retroDone?"5/5일 완료 · 사후 등록":
+    (retrospective.length?"실제 사용 "+retrospective.length+" / 5일":obs.length+" / 5일");
+  const importButton=$("registerRetrospectiveBtn");
+  importButton.classList.toggle("hide",!setup||retroDone||retrospective.length!==5);
   const confirmedBox=$("experimentRetrospective");clear(confirmedBox);
+  confirmedBox.classList.toggle("hide",retroDone);
   if(retrospective.length){
     confirmedBox.append(el("div","journalTitle","실제 서버 기록으로 확인된 활동 · "+retrospective.length+" / 5일"));
     retrospective.forEach(r=>{
@@ -3876,43 +3881,61 @@ function renderExperiment(){
   }
 
   const out=$("experimentDays");clear(out);
-  if(!obs.length)out.append(el("div","empty","아직 Day 기록이 없습니다."));
-  obs.forEach(r=>{
-    const row=el("div","experimentDay");
-    const day=el("div",null);day.append(el("strong",null,"Day "+r.day_number),el("span",null,fmtDate(r.observation_date)));
-    const mid=el("div",null);mid.append(el("strong",null,num(r.metric_value)+" "+(setup?.unit||"")),el("span",null,r.note||"실행 기록에서 계산"));
-    const status=el("strong",null,"저장됨");
-    row.append(day,mid,status);out.append(row)
-  });
+  if(retroDone){
+    out.append(el("div","journalTitle","실제 학습 기록 기반 Day 1~5 · 사후 등록 완료"));
+    retroDays.forEach(r=>{
+      const row=el("div","experimentDay"),day=el("div",null),metric=el("div",null);
+      day.append(el("strong",null,"Day "+r.day_number),el("span",null,fmtDate(r.activity_date)));
+      metric.append(el("strong",null,num(r.metric_value_minutes)+"분"+(r.metric_missing?" (시간 미측정)":"")));
+      const sub=r.other_metric_value!==null
+       ?"별도 "+num(r.other_metric_value)+(r.other_metric_unit||"")+" 달성"
+       :"할 일 완료 "+r.completed_task_count+"건";
+      metric.append(el("span",null,sub));
+      row.append(day,metric,el("strong",null,"사후 등록"));out.append(row);
+    });
+    const date=retroDays[0]?.registered_at;
+    const when=date?new Date(date).toLocaleString("ko-KR",{timeZone:"Asia/Seoul"}):"알 수 없음";
+    out.append(el("div","muted","사후 등록 시각 "+when+" · 실제 사용일은 각 Day에 표시 · 기존 당시 Day 버튼 저장과 구분해 보관"));
+  }else{
+    if(!obs.length)out.append(el("div","empty","실험 Day 기록이 아직 없습니다."));
+    obs.forEach(r=>{
+      const row=el("div","experimentDay"),day=el("div",null),mid=el("div",null);
+      day.append(el("strong",null,"Day "+r.day_number),el("span",null,fmtDate(r.observation_date)));
+      mid.append(el("strong",null,num(r.metric_value)+" "+(setup?.unit||"")),el("span",null,r.note||"실행 기록에서 계산"));
+      row.append(day,mid,el("strong",null,"당일 기록"));out.append(row);
+    });
+  }
 
-  const showChange=!!setup&&obs.length===2&&!change;
+  const showChange=!!setup&&!retroDone&&obs.length===2&&!change;
   $("ruleChangeBox").classList.toggle("hide",!showChange);
   if(showChange){
     const p=S.plans.find(x=>x.id===setup.plan_id);
     $("expNewDailyMinutes").value=Number(p?.daily_target_minutes||0)||"";
   }
 
-  const total=obs.reduce((n,r)=>n+Number(r.metric_value||0),0);
-  const avg=obs.length?total/obs.length:0;
+  const metrics=retroDone?retroDays.map(r=>Number(r.metric_value_minutes||0)):obs.map(r=>Number(r.metric_value||0));
+  const total=metrics.reduce((sum,n)=>sum+n,0);
+  const avg=metrics.length?total/metrics.length:0;
   const before=obs.filter(r=>r.day_number<=2),after=obs.filter(r=>r.day_number>=3);
   const beforeAvg=before.length?before.reduce((n,r)=>n+Number(r.metric_value||0),0)/before.length:0;
   const afterAvg=after.length?after.reduce((n,r)=>n+Number(r.metric_value||0),0)/after.length:0;
   const summary=$("experimentSummary");clear(summary);
-  [["합계",num(total)+(setup?" "+setup.unit:"")],["전체 평균",obs.length?num(Math.round(avg))+(setup?" "+setup.unit:""):"-"],["변경 전 평균",before.length?num(Math.round(beforeAvg))+(setup?" "+setup.unit:""):"-"],["변경 후 평균",after.length?num(Math.round(afterAvg))+(setup?" "+setup.unit:""):"-"]].forEach(([label,value])=>{
+  (retroDone
+    ?[["5일 합계",num(total)+"분"],["하루 평균",num(Math.round(avg))+"분 (계산값 "+num(avg)+"분)"],["시간 미측정",retroDays.filter(r=>r.metric_missing).length+"일 · 0분 반영"],["변경 전후 비교","불가 · 별도 30문제 목표는 Day 5"]]
+    :[["합계",num(total)+(setup?" "+setup.unit:"")],["전체 평균",obs.length?num(Math.round(avg))+(setup?" "+setup.unit:""):"-"],["변경 전 평균",before.length?num(Math.round(beforeAvg))+(setup?" "+setup.unit:""):"-"],["변경 후 평균",after.length?num(Math.round(afterAvg))+(setup?" "+setup.unit:""):"-"]]).forEach(([label,value])=>{
     const box=el("div",null);box.append(el("span",null,label),el("strong",null,value));summary.append(box)
   });
-  if(obs.length){
+  if(metrics.length){
     const formula=el("div","contextBox");
-    const values=obs.map(r=>num(Number(r.metric_value||0)));
-    formula.textContent="손계산 대조 · "+values.join(" + ")+" = "+num(total)+(setup?" "+setup.unit:"")+" · "+num(total)+" ÷ "+obs.length+" = "+num(Math.round(avg))+(setup?" "+setup.unit:"");
+    formula.textContent="손계산 대조 · "+metrics.map(x=>num(x)).join(" + ")+" = "+num(total)+"분 · "+num(total)+" ÷ "+metrics.length+" = "+num(avg)+"분";
     summary.after(formula);
     formula.classList.add("experimentFormula")
   }
   const previousFormula=summary.parentElement.querySelectorAll(".experimentFormula");
   if(previousFormula.length>1)previousFormula[0].remove();
 
-  $("saveTodayObservationBtn").disabled=!setup||obs.length>=5;
-  $("saveTodayObservationBtn").textContent=obs.length>=5?"5일 기록 완료":"오늘 실행 기록을 Day "+(obs.length+1)+"로 저장";
+  $("saveTodayObservationBtn").disabled=retroDone||!setup||obs.length>=5;
+  $("saveTodayObservationBtn").textContent=retroDone?"5/5일 사후 등록 완료":(obs.length>=5?"5일 기록 완료":"오늘 실행 기록을 Day "+(obs.length+1)+"로 저장");
 
   if(change){
     const note=el("div","contextBox","규칙 변경 완료 · "+change.old_rule+" → "+change.new_rule+" · "+change.reason);
@@ -3927,6 +3950,14 @@ function renderExperiment(){
     if(old?.classList?.contains("experimentRuleNote"))old.remove()
   }
 }
+$("registerRetrospectiveBtn").onclick=async()=>{
+  const button=$("registerRetrospectiveBtn");button.disabled=true;
+  try{
+    const result=await rpc("register_verified_retro_experiment",{});
+    if(Number(result)!==5)throw new Error("5일 등록 검증에 실패했습니다.");
+    await load(true);toast("기존 실제 활동 Day 1~5를 사후 등록했습니다.");
+  }catch(e){toast(String(e?.message||e))}finally{button.disabled=false}
+};
 $("expPlanId").addEventListener("change",()=>{
   if(S.experimentSetup)return;
   const p=S.plans.find(x=>x.id===$("expPlanId").value);
@@ -3977,7 +4008,7 @@ $("saveRuleChangeBtn").onclick=async()=>{
 
 /* EXPORT */
 $("exportBtn").onclick=()=>{
-  const data={exported_at:new Date().toISOString(),timezone:"Asia/Seoul",plans:S.plans,plan_history:S.history,plan_progress_items:S.progress,tasks:S.tasks,execution_records:S.execs,completion_events:S.events,task_reflections:S.taskRefs,reflections:S.refs,important_dates:S.importantDates,daily_goal_records:S.dailyRecords,t07_experiment_setup:S.experimentSetup?[S.experimentSetup]:[],t07_daily_observations:S.observations,t07_rule_changes:S.ruleChanges,t07_retrospective_activity_days:S.retrospectiveDays,retrospective_note:"사후 확인 활동 기록은 Day 버튼 저장과 구별됩니다."};
+  const data={exported_at:new Date().toISOString(),timezone:"Asia/Seoul",plans:S.plans,plan_history:S.history,plan_progress_items:S.progress,tasks:S.tasks,execution_records:S.execs,completion_events:S.events,task_reflections:S.taskRefs,reflections:S.refs,important_dates:S.importantDates,daily_goal_records:S.dailyRecords,t07_experiment_setup:S.experimentSetup?[S.experimentSetup]:[],t07_daily_observations:S.observations,t07_rule_changes:S.ruleChanges,t07_retrospective_activity_days:S.retrospectiveDays,t07_retro_experiment_days:S.retroExperimentDays,retrospective_note:"사후 확인 활동 기록은 Day 버튼 저장과 구별됩니다."};
   const u=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"})),a=document.createElement("a");a.href=u;a.download="pds-diary-export.json";a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)
 };
 
@@ -4033,16 +4064,18 @@ async function load(skipAutoComplete=false){
     api("important_dates?select=*&order=date.asc,created_at.asc"),
     api("daily_goal_records?select=*&order=record_date.asc,created_at.asc")
   ]);
-  const [setupRows,observations,ruleChanges,retrospectiveDays]=await Promise.all([
+  const [setupRows,observations,ruleChanges,retrospectiveDays,retroExperimentDays]=await Promise.all([
     api("experiment_setup?select=*&limit=1"),
     api("daily_observations?select=*&order=day_number.asc"),
     api("rule_changes?select=*&order=changed_at.asc"),
-    api("retrospective_activity_days?select=activity_date,study_minutes,completed_task_count,other_metric_value,other_metric_unit,registered_at&order=activity_date.asc")
+    api("retrospective_activity_days?select=activity_date,study_minutes,completed_task_count,other_metric_value,other_metric_unit,registered_at&order=activity_date.asc"),
+    api("retro_experiment_days?select=day_number,activity_date,metric_value_minutes,metric_missing,other_metric_value,other_metric_unit,completed_task_count,registered_at&order=day_number.asc")
   ]);
   S.experimentSetup=setupRows?.[0]||null;
   S.observations=observations||[];
   S.ruleChanges=ruleChanges||[];
   S.retrospectiveDays=retrospectiveDays||[];
+  S.retroExperimentDays=retroExperimentDays||[];
   // 이미 새 목표를 작성한 경우에도 기존 T06 자료 연결 요청을 표시한다.
   $("requestLegacyBtn").classList.remove("hide");
   {
