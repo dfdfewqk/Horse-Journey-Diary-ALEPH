@@ -28,3 +28,11 @@
 - service role은 Edge Function 환경 변수에서만 사용
 
 - T07 5일 관찰값은 브라우저 입력값을 믿지 않고 서버 RPC가 선택한 목표의 `execution_records.actual_minutes`를 직접 합산한다.
+
+## 2026-10-19 5일 사용 사후 근거 자료
+
+- production migration: `t07_verified_retroactive_activity_records`
+- source: `supabase/migrations/20261019_t07_retrospective_activity_days.sql`
+- table: `public.t07_retrospective_activity_days` (본인만 조회 가능, 인증 사용자 쓰기 불가)
+- 10/15~19 실제 T07 사용자 완료 이벤트에 기반해 10/19 09:37 KST에 별도 5일치 사후 검증을 저장.
+- 공식 `t07_daily_observations` 및 `t07_rule_changes`의 과거 기록은 생성하지 않았음.

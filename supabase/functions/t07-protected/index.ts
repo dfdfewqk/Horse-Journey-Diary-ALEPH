@@ -93,10 +93,18 @@ Deno.serve(async (req: Request) => {
   }
 
   if (action === "update") {
-    const patch = body.patch && typeof body.patch === "object" ? body.patch : {};
-    delete patch.user_id;
-    delete patch.id;
-    const { data, error } = await admin.from(table).update(patch).eq("id", id).eq("user_id", user.id).select("*");
+    // 이 보호 테스트 API는 서비스 키를 사용하므로 수정할 필드를 제한한다.
+    const allowed: Record<string,string[]> = {
+      plans: ["title","start_date","end_date","priority","success_criteria","estimated_minutes"],
+      tasks: ["title","description","due_date","priority","tag","estimated_minutes"],
+      execution_records: ["blocked_reason"]
+    };
+    const resource=String(body.resource || "plans");
+    const patch=body.patch && typeof body.patch==="object" && !Array.isArray(body.patch) ? body.patch : {};
+    const keys=Object.keys(patch);
+    if(!keys.length || keys.some(k=>!allowed[resource].includes(k))) return json(400,{error:"INVALID_UPDATE_FIELDS"});
+    const safePatch=Object.fromEntries(keys.map(k=>[k,patch[k]]));
+    const { data, error } = await admin.from(table).update(safePatch).eq("id", id).eq("user_id", user.id).select("*");
     if (error) return json(400, { error: "UPDATE_FAILED" });
     return json(200, { ok: true, data });
   }
