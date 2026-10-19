@@ -36,3 +36,10 @@
 - table: `public.t07_retrospective_activity_days` (본인만 조회 가능, 인증 사용자 쓰기 불가)
 - 10/15~19 실제 T07 사용자 완료 이벤트에 기반해 10/19 09:37 KST에 별도 5일치 사후 검증을 저장.
 - 공식 `t07_daily_observations` 및 `t07_rule_changes`의 과거 기록은 생성하지 않았음.
+
+## 2026-10-19 삭제 경로 후속 수정
+
+- production migration `t07_guard_daily_goal_sync_when_plan_cascades_on_delete` 적용 완료.
+- SQL: `supabase/migrations/20261019_t07_safe_cascade_daily_goal.sql`.
+- 자신의 계획 삭제 시 기존 집계 trigger의 `PLAN_NOT_FOUND` 오류를 수정함.
+- 사용자 역할로 DELETE 테스트 1건 동작 확인, 실제 변화는 트랜잭션에서 되돌려 기존 기록 보존.
