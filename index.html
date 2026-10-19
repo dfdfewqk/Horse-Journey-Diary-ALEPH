@@ -4172,10 +4172,12 @@ async function load(skipAutoComplete=false){
   {
     try{
       const claims=await api("claim_requests?select=id,status&order=requested_at.desc&limit=1");
-      const already=Array.isArray(claims)&&claims.length>0;
-      $("requestLegacyBtn").disabled=already;
-      $("requestLegacyBtn").textContent=already?"기존 T06 자료 연결 요청 접수됨":"기존 T06 자료 연결 요청";
-      $("legacyClaimFeedback").textContent=already?"기존 T06 자료 연결 요청이 접수되어 있습니다. 자료 연결 대기 중입니다.":"기존 자료 연결 요청이 아직 접수되지 않았습니다.";
+      const claim=Array.isArray(claims)?claims[0]:null;
+      const linked=claim?.status==="completed";
+      const pending=claim?.status==="pending";
+      $("requestLegacyBtn").disabled=!!claim;
+      $("requestLegacyBtn").textContent=linked?"기존 T06 자료 연결 완료":pending?"기존 T06 자료 연결 요청 접수됨":"기존 T06 자료 연결 요청";
+      $("legacyClaimFeedback").textContent=linked?"기존 T06 기록이 현재 계정에 연결되었습니다. T06 원본과 T07의 5일 실험 기록은 보존됩니다.":pending?"기존 T06 자료 연결 요청이 접수되어 있습니다. 자료 연결 대기 중입니다.":"기존 자료 연결 요청이 아직 접수되지 않았습니다.";
     }catch(e){
       console.error("T07 claim status check failed",e);
       $("legacyClaimFeedback").textContent="기존 자료 연결 상태를 확인하지 못했습니다: "+String(e?.message||"오류").slice(0,120);
